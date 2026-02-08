@@ -18,7 +18,7 @@ LIS3MDL - 3-axis magnetometer
 LSM303 series - Another common option
 
 Which Toughpad models have these sensors:
-All FZ-G1 models (MK1 through MK5) include the same basic sensor suite according to the specifications we found earlier. The specs stated that across all generations, the FZ-G1 has:
+All FZ-G1 models (MK1 through MK5) include the same basic sensor suite. Across all generations, the FZ-G1 has:
 
 Ambient light sensor
 Digital compass (magnetometer)
