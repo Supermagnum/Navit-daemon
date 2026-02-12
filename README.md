@@ -1,5 +1,181 @@
 # Navit-daemon
-The Toughpad FZ-G1 series:
+
+## Sensor APIs by platform (compass, gyro, accelerometer)
+
+How Android, iPhone, and the Toughpad FZ-G1 expose and use the digital compass (magnetometer), gyroscope, and accelerometer.
+
+### Android
+
+**Framework:** `android.hardware` (SensorManager, Sensor, SensorEvent, SensorEventListener).
+
+| Sensor | Type constant | Data | Units |
+|--------|----------------|------|--------|
+| Accelerometer | `Sensor.TYPE_ACCELEROMETER` | `event.values[0..2]` = x, y, z | m/s2 (includes gravity) |
+| Gyroscope | `Sensor.TYPE_GYROSCOPE` | `event.values[0..2]` = rate around x, y, z | rad/s |
+| Magnetometer (compass) | `Sensor.TYPE_MAGNETIC_FIELD` | `event.values[0..2]` = field along x, y, z | microtesla (uT) |
+
+Get `SensorManager` via `getSystemService(Context.SENSOR_SERVICE)`, then `getDefaultSensor(TYPE_...)` and `registerListener(listener, sensor, delay)`. Events arrive in `onSensorChanged(SensorEvent event)`.
+
+For compass/orientation use accelerometer + magnetometer with `SensorManager.getRotationMatrix(rotationMatrix, null, accelerometerReading, magnetometerReading)` and `SensorManager.getOrientation(rotationMatrix, orientationAngles)` to get azimuth (compass), pitch, and roll. Alternatively use the fused `TYPE_ROTATION_VECTOR` (uses gyro + accel + magnetometer when available).
+
+Accelerometer and gyroscope are always hardware-based; most devices have an accelerometer, many have a gyroscope. From API 31 these sensors can be rate-limited. Uncalibrated variants exist: `TYPE_ACCELEROMETER_UNCALIBRATED`, `TYPE_GYROSCOPE_UNCALIBRATED`, `TYPE_MAGNETIC_FIELD_UNCALIBRATED`.
+
+### iPhone / iOS
+
+**Framework:** Core Motion (`CMMotionManager`).
+
+| Sensor | API | Data |
+|--------|-----|------|
+| Accelerometer | `startAccelerometerUpdates(to:withHandler:)` / `accelerometerData` | x, y, z acceleration (including gravity) |
+| Gyroscope | `startGyroUpdates(to:withHandler:)` / `gyroData` | Rotation rate x, y, z |
+| Magnetometer | `startMagnetometerUpdates(to:withHandler:)` / `magnetometerData` | `CMMagneticField` x, y, z |
+
+Create one `CMMotionManager`; set e.g. `accelerometerUpdateInterval`, `gyroUpdateInterval`, `magnetometerUpdateInterval` (in seconds), then call the corresponding `start...Updates(to:withHandler:)`. The handler receives the latest sample (e.g. `CMMagnetometerData` with `magneticField.x/y/z`).
+
+For fused orientation/compass use `startDeviceMotionUpdates(to:withHandler:)` which delivers `CMDeviceMotion`: attitude (roll, pitch, yaw), rotation rate, user acceleration (gravity removed), and optionally calibrated `magneticField`. That is the standard way to get compass-like orientation on iOS.
+
+Check `isAccelerometerAvailable`, `isGyroAvailable`, `isMagnetometerAvailable` before starting updates.
+
+### Toughpad FZ-G1 series (Linux)
+
+Sensors are exposed via the Linux **Industrial I/O (IIO)** subsystem in sysfs, not a high-level API. There is no built-in "compass app" API; you read raw IIO channels under `/sys/bus/iio/devices/` (e.g. `in_accel_*`, `in_anglvel_*`, `in_magn_*`), apply scale factors to get physical units, and run your own fusion (e.g. Fusion AHRS in a Python daemon) to get orientation. See the section below for hardware details.
+
+### Comparison
+
+| Aspect | Android | iPhone / iOS | Toughpad FZ-G1 |
+|--------|---------|--------------|----------------|
+| Accelerometer | SensorManager, TYPE_ACCELEROMETER, m/s2 | CMMotionManager, accelerometerData / deviceMotion | IIO sysfs, raw then scale to m/s2 |
+| Gyroscope | TYPE_GYROSCOPE, rad/s | gyroData / deviceMotion | IIO sysfs, raw then scale to deg/s or rad/s |
+| Magnetometer | TYPE_MAGNETIC_FIELD, uT | magnetometerData / deviceMotion.magneticField | IIO sysfs, raw then scale |
+| Fused orientation/compass | getRotationMatrix + getOrientation, or TYPE_ROTATION_VECTOR | CMDeviceMotion (attitude + magneticField) | User-space fusion (e.g. Fusion AHRS in Python daemon) |
+| Integration | In-app only | In-app only | Daemon reads IIO + gpsd, outputs NMEA/gpsd for Navit |
+
+### IMU calibration
+
+The daemon applies a software calibration layer: **gyro bias** and **accel offset** are subtracted from each sample before AHRS fusion. You can load calibration from a file, set it at runtime via the calibration API, or run an automatic gyro bias collection (device held still).
+
+**Options:**
+
+- **`--calibration-file PATH`**  
+  Load calibration from a JSON file at startup. If the calibration API is used to set values or to run gyro calibration, the file is updated when you call `set_calibration` or when gyro calibration finishes (so the daemon persists calibration).
+
+- **`--calibration-port PORT`**  
+  Enable the calibration TCP API on the given port (default: 0 = disabled). Bind address is 127.0.0.1. See "Calibration API" below.
+
+**Linux (IIO):** The IIO reader still uses kernel sysfs scale/offset when present (`in_accel_scale`, `in_anglvel_scale`, etc.). The daemon’s calibration is applied on top of that (so you can correct residual bias in user space).
+
+**Android / iPhone (remote):** The client sends scaled values; the daemon’s calibration (bias/offset) is applied to those before fusion.
+
+### Calibration API
+
+When `--calibration-port PORT` is set, the daemon listens on `127.0.0.1:PORT`. Protocol: **one JSON object per line**. Send one request line; read one response line.
+
+**Get current calibration and status**
+
+Request:
+```json
+{"get_calibration": true}
+```
+Response:
+```json
+{"gyro_bias": [0.0, 0.0, 0.0], "accel_offset": [0.0, 0.0, 0.0], "calibration_status": "idle", "samples_collected": 0, "samples_needed": 0}
+```
+When collecting gyro bias, `calibration_status` is `"collecting"` and `samples_collected` / `samples_needed` show progress.
+
+**Set calibration**
+
+Request:
+```json
+{"set_calibration": {"gyro_bias": [0.1, -0.05, 0.02], "accel_offset": [0.0, 0.0, 0.0]}}
+```
+Units: `gyro_bias` in deg/s, `accel_offset` in m/s^2. Omit keys to leave that part unchanged. If `--calibration-file` is set, the file is updated.
+Response: `{"ok": true}` or `{"error": "..."}`.
+
+**Run gyro bias calibration**
+
+Place the device still (e.g. on a table), then send:
+
+Request:
+```json
+{"calibrate_gyro": {"seconds": 5}}
+```
+`seconds` (0.5–60) is how long to collect; default 5. The daemon collects gyro samples at the configured IMU rate, then sets `gyro_bias` to the mean of those samples.
+
+Response: `{"status": "collecting", "samples_needed": 500}`. Poll `get_calibration` until `calibration_status` is `"idle"`; then `gyro_bias` is updated. If `--calibration-file` is set, the file is written when collection finishes.
+
+**Example (command line)**
+
+```bash
+# Start daemon with calibration file and API on port 2950
+navit-daemon --calibration-file /var/lib/navit-daemon/cal.json --calibration-port 2950
+
+# In another terminal: get current calibration
+echo '{"get_calibration": true}' | nc -q 1 127.0.0.1 2950
+
+# Set gyro bias manually (e.g. from external calibration)
+echo '{"set_calibration": {"gyro_bias": [0.01, -0.02, 0.01]}}' | nc -q 1 127.0.0.1 2950
+
+# Start 5-second gyro collection (hold device still)
+echo '{"calibrate_gyro": {"seconds": 5}}' | nc -q 1 127.0.0.1 2950
+```
+
+### Platform compatibility of this daemon
+
+**Linux: yes.** Use `--source=linux` (default). It uses the kernel IIO subsystem (`/sys/bus/iio/devices/`) for accelerometer and gyroscope, and gpsd for GPS. It runs as a normal process and outputs NMEA on TCP. Target devices: Toughpad FZ-G1 and any Linux system with IIO IMU and gpsd.
+
+**Android and iPhone: yes, via remote.** Run the daemon on a Linux host with `--source=remote`. An Android or iOS app reads device sensors and GPS, then sends JSON over TCP to the daemon; the daemon fuses and outputs NMEA. All three platforms supported: Linux natively, Android and iOS as TCP clients.
+
+**Remote protocol.** With `--source=remote`, the daemon listens on `--remote-port` (default 2949). Client sends newline-delimited JSON: IMU `{"accel":[x,y,z],"gyro":[x,y,z]}` (m/s^2, deg/s), GPS `{"lat":float,"lon":float,"alt":float,"speed_ms":float,"track":float,"time_iso":str|null}`. One line can contain both keys.
+
+For in-app fusion on Android or iOS without the daemon, use the platform APIs (SensorManager rotation vector, Core Motion device motion) inside Navit’s platform-specific vehicle code using the APIs described in the Comparison table above.
+
+### How the Navit codebase can benefit from these sensors
+
+The following is based on the Navit codebase at `../navit` (or the navit repo). Navit consumes position and direction via the vehicle plugin interface. Key attributes are `position_direction` (heading in degrees), `position_speed`, `position_coord_geo`, and optionally `position_magnetic_direction`. Providing better or continuous direction from magnetometer/gyro/accelerometer fusion improves several areas:
+
+**1. Direction source today**
+
+- **vehicle_gpsd.c:** `position_direction` comes from gpsd `data->fix.track` (GPS course-over-ground). Only valid when moving and when GPS has fix.
+- **vehicle_android.c:** Direction from `Location.getBearing()` (GPS or fused provider; often 0 or stale when stationary).
+- **vehicle_iphone.c:** Direction from Core Location (course). Same limitations when stationary or in poor GPS.
+
+When GPS is lost or poor (tunnel, urban canyon, slow/stationary), direction is missing or stale. Fused IMU heading (magnetometer + gyro, optionally accelerometer) can supply continuous heading and fill these gaps.
+
+**2. Tunnel extrapolation (track.c)**
+
+When the user is on an underground segment and GPS is lost (`tr->tunnel == 1`), Navit extrapolates position using last known speed and direction: `transform_project(pro, &tr->curr_in, tr->speed * tr->tunnel_extrapolation / 36, tr->direction, &tr->curr_in)`. It uses `tr->direction` (last direction from the vehicle) and can fall back to road segment angle. If the vehicle plugin supplies direction from a fused IMU source (e.g. the daemon on Toughpad feeding NMEA/gpsd with heading from Fusion AHRS), tunnel extrapolation stays accurate, especially on curved roads, instead of relying on a single stale GPS bearing.
+
+**3. Vehicle cursor and map rotation (navit.c, vehicle.c)**
+
+The map vehicle icon rotation uses `position_direction`: `nv->dir = *attr_dir.u.numd` then `vehicle_draw(..., nv->dir - transform_get_yaw(...), nv->speed)`. So the on-screen heading comes directly from the vehicle. Better, more frequent direction (e.g. from IMU) keeps the icon and map orientation aligned with the real heading when GPS bearing is absent or laggy.
+
+**4. Compass OSD (osd_core.c)**
+
+The compass OSD draws from `position_direction` via `vehicle_get_attr(v, attr_position_direction, &attr_dir, NULL)`. With magnetometer-based or fused heading, the compass remains usable when GPS bearing is unavailable (e.g. standing still or in a tunnel).
+
+**5. Street matching and turn hints (track.c)**
+
+Tracking uses `tr->curr_angle` / `tr->direction` together with road segment angles (`tracking_angle_delta`, `street_direction` for forward/backward). More accurate and stable heading improves which street segment is selected and whether Navit thinks you are moving with or against the segment, especially on winding roads.
+
+**6. Lag extrapolation (track.c)**
+
+When `attr_lag` is set, position is extrapolated using speed and direction; direction is interpolated between previous and current: `edirection = direction + tracking_angle_diff(direction, tr->direction, 360) * lag.u.num / 10`. More frequent, stable direction updates from an IMU reduce jumps and make this extrapolation smoother.
+
+**7. Pedestrian plugin (plugin/pedestrian/pedestrian.c)**
+
+On Android, the pedestrian plugin already uses magnetometer and accelerometer: it derives device orientation (portrait/landscape/flat) and yaw from raw sensor data and sets `attr_orientation` and transform pitch/yaw for the map view. So Navit already benefits from these sensors in pedestrian mode; the same idea (sensor-derived heading) can be used to feed or correct `position_direction` when in vehicle mode and GPS bearing is poor or absent.
+
+**8. position_magnetic_direction**
+
+The attribute exists (e.g. vehicle_file.c, vehicle_wince.c) but is not widely used. It could be used for true vs magnetic north on the compass or as an input to fusion when both GPS track and magnetic heading are available.
+
+**Summary**
+
+Navit benefits from sensor-derived or sensor-fused heading wherever it currently uses `position_direction`: tunnel dead reckoning, vehicle icon rotation, compass OSD, street matching, and lag compensation. On Android and iPhone, improving the vehicle plugin to use fused orientation (e.g. rotation vector or device motion) when GPS bearing is invalid would help. On Toughpad FZ-G1, the Python daemon that fuses IIO IMU + gpsd and outputs NMEA/gpsd is the way to supply that improved direction to Navit.
+
+---
+
+## The Toughpad FZ-G1 series
 Likely uses STMicroelectronics sensor models:
 Accelerometer:
 
@@ -26,47 +202,3 @@ Gyro sensor
 Acceleration sensor
 
 FZ-G1 MK4 (FZ-G1R0-53TE) definitely has these sensors, and all other FZ-G1 variants (MK1, MK2, MK3, MK5) should have similar or identical sensor configurations.
-
-To get these to work with Navit and similar one needs a Python daemon that runs in the background. It reads GPS from gpsd, reads IMU data from Linux IIO, runs the Fusion algorithm to combine them, and outputs enhanced position data that Navit can consume.
-
-Step 2: Install prerequisites:
-
-You'll need to install the necessary packages on your Linux system. Install Python3 development packages, the imufusion Python package which is the Python interface to the Fusion library, the gpsd client library for Python, and libiio Python bindings. You might also need the pyserial library if you want to create a virtual serial port for output.
-
-Step 3: Test your sensor access:
-
-Before writing the wrapper, verify you can read both data sources. For GPS, test that you can connect to gpsd and get position data - it typically runs on localhost port 2947. For the IMU, check that the accelerometer and gyroscope appear in /sys/bus/iio/devices/ and that you can read raw values from the files there.
-
-Step 4: Create the wrapper structure:
-
-Your Python wrapper needs several main components. First, an initialization section where you set up the Fusion AHRS algorithm with appropriate settings, connect to gpsd, and open the IIO device files for the accelerometer and gyroscope. Second, a main loop that runs continuously - it reads new IMU samples at a high rate (typically 100-200 Hz), reads GPS updates when available (usually 1 Hz), feeds the IMU data into the Fusion algorithm to get orientation, uses GPS position and velocity when available to correct for drift, and outputs the fused position estimate. Third, an output mechanism that formats the result as NMEA sentences and either writes to a virtual serial port or creates a new gpsd-compatible network service.
-
-Step 5: Handle the IMU data:
-
-Read the raw accelerometer and gyroscope values from the IIO sysfs files, multiply by the scale factors to convert to proper units (m/s² for accelerometer, degrees/second for gyroscope), and feed these into the Fusion library. The library will calculate orientation (roll, pitch, yaw) from this data.
-
-Step 6: Integrate GPS data:
-
-When GPS updates arrive from gpsd, you use the position (latitude, longitude, altitude) and velocity to anchor the IMU-based dead reckoning. The GPS provides absolute position fixes, while the IMU provides smooth, high-rate updates between GPS readings and can continue providing estimates during GPS outages.
-
-Step 7: Handle the fusion:
-
-The Fusion library primarily gives you orientation (which direction you're facing). You need to combine this with GPS velocity to estimate position during GPS outages. When GPS is available, you use GPS position directly. When GPS is lost, you integrate velocity (from last GPS reading) using the orientation from the IMU to estimate how far you've moved.
-
-Step 8: Output for Navit:
-
-Navit expects to read from either gpsd or directly from NMEA sentences. The easiest approach is to create a virtual serial port pair using socat, write NMEA sentences (especially GGA for position and RMC for position+velocity) to one end, and configure Navit or gpsd to read from the other end. Alternatively, you could modify gpsd to accept your data or create a simple TCP server that speaks the gpsd protocol.
-
-Step 9: Handle timing and synchronization:
-
-The IMU should be sampled frequently (100+ Hz) while GPS updates arrive slowly (1 Hz). Your loop needs to handle these different rates. You might use Python's select or asyncio to handle the different data sources efficiently without blocking.
-
-Step 10: Calibration:
-
-Before your system works well, you need calibration. The Fusion library has built-in gyroscope bias estimation, but you'll need to determine the accelerometer scale factors and offsets, figure out the mounting orientation of the IMU relative to the vehicle (which direction is forward), and possibly tune the Fusion algorithm settings like the gain parameter that controls how much it trusts the accelerometer versus the gyroscope.
-
-Practical considerations:
-Start simple - first just get orientation working by reading IMU and running Fusion to show roll, pitch, and yaw. Then add GPS reading and just pass GPS through unchanged. Then add the logic to detect GPS outages and use IMU + last velocity to estimate position. Test in a vehicle or while walking to see how well it maintains position during simulated GPS outages (you could block the GPS antenna temporarily).
-The trickiest part will be the position estimation during GPS outages. The Fusion library gives you orientation but not position. You'll need to maintain velocity state and integrate it using the orientation to get position change.
-
-This is a substantial project - probably a few weeks of part-time work to get something functional, and more time to tune it for good performance. But having the Fusion library handle the complex sensor fusion mathematics makes it much more achievable than starting from scratch.

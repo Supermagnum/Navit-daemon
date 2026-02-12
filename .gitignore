@@ -1,0 +1,10 @@
+# Virtual env and build artifacts
+.venv/
+*.egg-info/
+__pycache__/
+.pytest_cache/
+*.pyc
+.mypy_cache/
+
+# Local calibration (optional)
+cal.json

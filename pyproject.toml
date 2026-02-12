@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "navit-daemon"
+version = "0.1.0"
+description = "Daemon that fuses GPS (gpsd) and IMU (Linux IIO) for Navit with AHRS heading."
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "GPL-2.0-or-later" }
+authors = [{ name = "Navit-daemon" }]
+dependencies = [
+    "imufusion>=1.2.0",
+    "gpsd-py3>=0.3.0",
+]
+
+[project.optional-dependencies]
+dev = ["flake8", "black", "mypy", "pytest"]
+
+[project.scripts]
+navit-daemon = "navit_daemon.main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["navit_daemon*"]
+
+[tool.black]
+line-length = 88
+target-version = ["py38"]
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_ignores = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.flake8]
+max-line-length = 88
+extend-ignore = ["E203"]
+exclude = [".git", "__pycache__", ".venv"]
+max-complexity = 10

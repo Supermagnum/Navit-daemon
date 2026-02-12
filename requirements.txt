@@ -1,0 +1,2 @@
+imufusion>=1.2.0
+gpsd-py3>=0.3.0
