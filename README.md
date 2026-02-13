@@ -143,6 +143,78 @@ For in-app fusion on Android or iOS without the daemon, use the platform APIs (S
 
 **Build instructions:** See [BUILD.md](BUILD.md) for platform-specific build and packaging instructions for Linux, Android, and iOS.
 
+### Supported IMU devices (Raspberry Pi and Linux)
+
+The daemon supports common IMU sensors used with Raspberry Pi and other Linux systems via the Linux IIO subsystem. Devices are auto-detected, or you can specify paths manually.
+
+**Supported IMUs:**
+
+| IMU Model | Sensors | Driver | Notes |
+|-----------|---------|--------|-------|
+| **MPU6050** | Accel + Gyro (6-axis) | `i2c-mpu6050` | Very common, I2C interface |
+| **MPU6500** | Accel + Gyro (6-axis) | `i2c-mpu6050` | Similar to MPU6050 |
+| **MPU9250** | Accel + Gyro + Mag (9-axis) | `i2c-mpu6050` | Includes magnetometer (AK8963) |
+| **MPU9255** | Accel + Gyro + Mag (9-axis) | `i2c-mpu6050` | Similar to MPU9250 |
+| **LSM6DS3** | Accel + Gyro (6-axis) | `st_lsm6dsx` | STMicroelectronics |
+| **LSM6DSO** | Accel + Gyro (6-axis) | `st_lsm6dsx` | STMicroelectronics |
+| **LSM6DSL** | Accel + Gyro (6-axis) | `st_lsm6dsx` | STMicroelectronics |
+| **LSM6DSM** | Accel + Gyro (6-axis) | `st_lsm6dsx` | STMicroelectronics |
+| **BNO055** | Accel + Gyro + Mag (9-axis) | `bno055` | Includes built-in fusion (optional) |
+| **ICM20948** | Accel + Gyro + Mag (9-axis) | `inv_icm20948` | InvenSense |
+| **ADXL345** | Accel only (3-axis) | `adxl345` | Accelerometer only (no gyro/mag) |
+
+**Setup instructions:**
+
+1. **Enable I2C/SPI** (if needed):
+   ```bash
+   # Raspberry Pi: Enable I2C
+   sudo raspi-config  # Interface Options -> I2C -> Enable
+   # Or edit /boot/config.txt and add: dtparam=i2c_arm=on
+   ```
+
+2. **Load kernel driver** (usually automatic):
+   ```bash
+   # Check if driver is loaded
+   lsmod | grep -E "(mpu6050|lsm6ds|bno055|icm20948|adxl345)"
+   
+   # Check IIO devices
+   ls -la /sys/bus/iio/devices/
+   ```
+
+3. **Verify device detection**:
+   ```bash
+   # List IIO devices
+   cat /sys/bus/iio/devices/iio:device*/name
+   
+   # Check available channels
+   ls /sys/bus/iio/devices/iio:device0/
+   ```
+
+4. **Run daemon** (auto-detection):
+   ```bash
+   # Daemon will auto-detect IMU devices
+   navit-daemon --source=linux
+   
+   # Or specify paths manually
+   navit-daemon --accel-path /sys/bus/iio/devices/iio:device0 \
+                --gyro-path /sys/bus/iio/devices/iio:device0 \
+                --magnetometer-path /sys/bus/iio/devices/iio:device1
+   ```
+
+**Device-specific notes:**
+
+- **MPU6050/MPU9250**: Very common on Raspberry Pi HATs. Usually appears as `iio:device0` with both accel and gyro channels. MPU9250 includes magnetometer (may appear as separate device or same device).
+- **LSM6DS series**: Often found on development boards. Accel and gyro typically on same device.
+- **BNO055**: Has built-in fusion chip; can use its orientation directly or use raw sensor data. The daemon uses raw data for consistency.
+- **ADXL345**: Accelerometer only; requires separate gyroscope for AHRS. Not recommended for heading without gyro.
+
+**Troubleshooting:**
+
+- If devices aren't detected, check kernel driver is loaded: `dmesg | grep -i iio`
+- Verify I2C/SPI is enabled and device is connected: `i2cdetect -y 1` (for I2C bus 1)
+- Check device permissions: `ls -la /sys/bus/iio/devices/iio:device*/in_accel_*_raw`
+- Enable debug logging: `navit-daemon --debug` to see device discovery messages
+
 ### How the Navit codebase can benefit from these sensors
 
 The following is based on the Navit codebase at `../navit` (or the navit repo). Navit consumes position and direction via the vehicle plugin interface. Key attributes are `position_direction` (heading in degrees), `position_speed`, `position_coord_geo`, and optionally `position_magnetic_direction`. Providing better or continuous direction from magnetometer/gyro/accelerometer fusion improves several areas:

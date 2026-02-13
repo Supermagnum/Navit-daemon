@@ -4,15 +4,56 @@ Read accelerometer, gyroscope, and magnetometer from Linux IIO sysfs.
 Discovers IIO devices under /sys/bus/iio/devices/ and reads raw channels
 with scale/offset to produce physical units: m/s^2 for accel, deg/s for gyro,
 microtesla (uT) for magnetometer.
+
+Supports common Raspberry Pi IMUs:
+- MPU6050, MPU6500, MPU9250 (InvenSense)
+- LSM6DS3, LSM6DSO, LSM6DSL (STMicroelectronics)
+- BNO055 (Bosch)
+- ICM20948 (InvenSense)
+- ADXL345 (Analog Devices)
 """
 
 import logging
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
 IIO_BASE = Path("/sys/bus/iio/devices")
+
+# Common IMU device identifiers (name/model patterns)
+COMMON_IMU_PATTERNS: Dict[str, Dict[str, List[str]]] = {
+    "mpu6050": {
+        "name": ["mpu6050", "mpu6500"],
+        "channels": ["in_accel", "in_anglvel"],
+        "description": "MPU6050/MPU6500 (6-axis: accel + gyro)",
+    },
+    "mpu9250": {
+        "name": ["mpu9250", "mpu9255"],
+        "channels": ["in_accel", "in_anglvel", "in_magn"],
+        "description": "MPU9250/MPU9255 (9-axis: accel + gyro + mag)",
+    },
+    "lsm6ds": {
+        "name": ["lsm6ds3", "lsm6dso", "lsm6dsl", "lsm6dsm"],
+        "channels": ["in_accel", "in_anglvel"],
+        "description": "LSM6DS3/LSM6DSO/LSM6DSL/LSM6DSM (6-axis: accel + gyro)",
+    },
+    "bno055": {
+        "name": ["bno055"],
+        "channels": ["in_accel", "in_anglvel", "in_magn"],
+        "description": "BNO055 (9-axis with built-in fusion)",
+    },
+    "icm20948": {
+        "name": ["icm20948"],
+        "channels": ["in_accel", "in_anglvel", "in_magn"],
+        "description": "ICM20948 (9-axis: accel + gyro + mag)",
+    },
+    "adxl345": {
+        "name": ["adxl345"],
+        "channels": ["in_accel"],
+        "description": "ADXL345 (3-axis accelerometer only)",
+    },
+}
 
 
 def _read_one(path: Path, default: float = 0.0) -> float:
@@ -21,6 +62,64 @@ def _read_one(path: Path, default: float = 0.0) -> float:
         return float(path.read_text().strip())
     except (OSError, ValueError):
         return default
+
+
+def _read_string(path: Path, default: str = "") -> str:
+    """Read a string value from sysfs; return default on error."""
+    try:
+        return path.read_text().strip()
+    except OSError:
+        return default
+
+
+def get_device_name(device_path: Path) -> str:
+    """Return device name from IIO sysfs (name or model attribute)."""
+    name_path = device_path / "name"
+    model_path = device_path / "model"
+    name = _read_string(name_path)
+    if name:
+        return name.lower()
+    model = _read_string(model_path)
+    if model:
+        return model.lower()
+    return ""
+
+
+def identify_imu_device(device_path: Path) -> Optional[str]:
+    """
+    Identify common IMU device from IIO sysfs path.
+
+    Returns IMU type string (e.g., 'mpu6050', 'lsm6ds', 'bno055') or None.
+    """
+    name = get_device_name(device_path)
+    if not name:
+        return None
+    for imu_type, info in COMMON_IMU_PATTERNS.items():
+        for pattern in info["name"]:
+            if pattern in name:
+                return imu_type
+    return None
+
+
+def get_device_info(device_path: Path) -> Dict[str, str]:
+    """
+    Get device information (name, model, IMU type).
+
+    Returns dict with 'name', 'model', 'imu_type', 'description'.
+    """
+    name = _read_string(device_path / "name", "")
+    model = _read_string(device_path / "model", "")
+    imu_type = identify_imu_device(device_path)
+    description = ""
+    if imu_type and imu_type in COMMON_IMU_PATTERNS:
+        description = COMMON_IMU_PATTERNS[imu_type]["description"]
+    return {
+        "name": name,
+        "model": model,
+        "imu_type": imu_type or "unknown",
+        "description": description,
+        "path": str(device_path),
+    }
 
 
 def _has_channels(device_path: Path, prefix: str) -> bool:
@@ -49,16 +148,35 @@ def find_accel_device(accel_path: Optional[str] = None) -> Optional[Path]:
     Return IIO sysfs path for accelerometer.
 
     If accel_path is set, use it if it exists and has accel channels.
-    Otherwise search for first device with in_accel_* channels.
+    Otherwise search for devices with in_accel_* channels, prioritizing
+    known IMU devices (MPU6050, LSM6DS, etc.).
     """
     if accel_path:
         p = Path(accel_path)
         if p.exists() and _has_channels(p, "in_accel"):
+            info = get_device_info(p)
+            if info["imu_type"] != "unknown":
+                logger.info("Using accelerometer: %s (%s)", info["description"], p)
             return p
         logger.warning("Accel path %s missing or invalid", accel_path)
-    for dev in discover_iio_devices():
+    devices = discover_iio_devices()
+    known_imus = []
+    other_devices = []
+    for dev in devices:
         if _has_channels(dev, "in_accel"):
-            return dev
+            imu_type = identify_imu_device(dev)
+            if imu_type:
+                known_imus.append((dev, imu_type))
+            else:
+                other_devices.append(dev)
+    if known_imus:
+        dev, imu_type = known_imus[0]
+        info = get_device_info(dev)
+        logger.info("Found accelerometer: %s (%s)", info["description"], dev)
+        return dev
+    if other_devices:
+        logger.info("Found accelerometer at %s (unknown device)", other_devices[0])
+        return other_devices[0]
     return None
 
 
@@ -70,18 +188,39 @@ def find_gyro_device(
     Return IIO sysfs path for gyroscope.
 
     If gyro_path is set, use it if valid. Otherwise prefer accel_path
-    if it has gyro channels (e.g. LSM6DS0), then any device with in_anglvel.
+    if it has gyro channels (e.g., MPU6050, LSM6DS), then search for
+    devices with in_anglvel, prioritizing known IMU devices.
     """
     if gyro_path:
         p = Path(gyro_path)
         if p.exists() and _has_channels(p, "in_anglvel"):
+            info = get_device_info(p)
+            if info["imu_type"] != "unknown":
+                logger.info("Using gyroscope: %s (%s)", info["description"], p)
             return p
         logger.warning("Gyro path %s missing or invalid", gyro_path)
     if accel_path and _has_channels(accel_path, "in_anglvel"):
+        info = get_device_info(accel_path)
+        logger.info("Using gyroscope from same device as accelerometer: %s", info.get("description", accel_path))
         return accel_path
-    for dev in discover_iio_devices():
+    devices = discover_iio_devices()
+    known_imus = []
+    other_devices = []
+    for dev in devices:
         if _has_channels(dev, "in_anglvel"):
-            return dev
+            imu_type = identify_imu_device(dev)
+            if imu_type:
+                known_imus.append((dev, imu_type))
+            else:
+                other_devices.append(dev)
+    if known_imus:
+        dev, imu_type = known_imus[0]
+        info = get_device_info(dev)
+        logger.info("Found gyroscope: %s (%s)", info["description"], dev)
+        return dev
+    if other_devices:
+        logger.info("Found gyroscope at %s (unknown device)", other_devices[0])
+        return other_devices[0]
     return None
 
 
@@ -92,19 +231,40 @@ def find_magnetometer_device(
     """
     Return IIO sysfs path for magnetometer.
 
-    If magnetometer_path is set, use it if valid. Otherwise search for
-    any device with in_magn_* channels.
+    If magnetometer_path is set, use it if valid. Otherwise prefer accel_path
+    if it has magnetometer channels (e.g., MPU9250), then search for devices
+    with in_magn_* channels, prioritizing known IMU devices.
     """
     if magnetometer_path:
         p = Path(magnetometer_path)
         if p.exists() and _has_channels(p, "in_magn"):
+            info = get_device_info(p)
+            if info["imu_type"] != "unknown":
+                logger.info("Using magnetometer: %s (%s)", info["description"], p)
             return p
         logger.warning("Magnetometer path %s missing or invalid", magnetometer_path)
     if accel_path and _has_channels(accel_path, "in_magn"):
+        info = get_device_info(accel_path)
+        logger.info("Using magnetometer from same device as accelerometer: %s", info.get("description", accel_path))
         return accel_path
-    for dev in discover_iio_devices():
+    devices = discover_iio_devices()
+    known_imus = []
+    other_devices = []
+    for dev in devices:
         if _has_channels(dev, "in_magn"):
-            return dev
+            imu_type = identify_imu_device(dev)
+            if imu_type:
+                known_imus.append((dev, imu_type))
+            else:
+                other_devices.append(dev)
+    if known_imus:
+        dev, imu_type = known_imus[0]
+        info = get_device_info(dev)
+        logger.info("Found magnetometer: %s (%s)", info["description"], dev)
+        return dev
+    if other_devices:
+        logger.info("Found magnetometer at %s (unknown device)", other_devices[0])
+        return other_devices[0]
     return None
 
 
