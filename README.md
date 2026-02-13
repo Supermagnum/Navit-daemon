@@ -12,6 +12,8 @@ The daemon uses AHRS (Attitude and Heading Reference System) fusion to compute o
 
 **Magnetometer support:** Magnetometer is optional but recommended. If unavailable, the daemon falls back to gyroscope + accelerometer fusion (which may drift over time). On Linux, use `--magnetometer-path` to specify the IIO device, or it will be auto-detected. Android/iOS clients send magnetometer data when available. Magnetometer calibration (bias) can be set via the calibration API.
 
+**Test results:** See [TEST_RESULTS.md](TEST_RESULTS.md) for comprehensive test coverage details (172 passed, 17 skipped).
+
 ## Sensor APIs by platform (compass, gyro, accelerometer)
 
 How Android, iPhone, and the Toughpad FZ-G1 expose and use the digital compass (magnetometer), gyroscope, and accelerometer.
