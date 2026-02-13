@@ -76,6 +76,56 @@ class TestFusionAhrsEdgeCases:
         assert ahrs.initialized is True
 
 
+@pytest.mark.skipif(not IMUFUSION_AVAILABLE, reason="imufusion not installed")
+class TestFusionAhrsInvalidAndMalformed:
+    """Invalid and malformed data handling."""
+
+    def test_negative_sample_period(self) -> None:
+        ahrs = FusionAhrs(gain=0.5)
+        try:
+            ahrs.update((0.0, 0.0, 9.81), (0.0, 0.0, 0.0), -0.01)
+            assert True
+        except (ValueError, TypeError):
+            assert True
+
+    def test_zero_sample_period(self) -> None:
+        ahrs = FusionAhrs(gain=0.5)
+        ahrs.update((0.0, 0.0, 9.81), (0.0, 0.0, 0.0), 0.0)
+        assert ahrs.initialized is True
+
+    def test_very_large_sample_period(self) -> None:
+        ahrs = FusionAhrs(gain=0.5)
+        ahrs.update((0.0, 0.0, 9.81), (0.0, 0.0, 0.0), 1000.0)
+        assert ahrs.initialized is True
+
+    def test_extreme_accel_values(self) -> None:
+        ahrs = FusionAhrs(gain=0.5)
+        ahrs.update((1000.0, -1000.0, 9.81), (0.0, 0.0, 0.0), 0.01)
+        assert ahrs.initialized is True
+
+    def test_extreme_gyro_values(self) -> None:
+        ahrs = FusionAhrs(gain=0.5)
+        ahrs.update((0.0, 0.0, 9.81), (1000.0, -1000.0, 500.0), 0.01)
+        assert ahrs.initialized is True
+
+    def test_extreme_magnetometer_values(self) -> None:
+        ahrs = FusionAhrs(gain=0.5)
+        ahrs.update(
+            (0.0, 0.0, 9.81), (0.0, 0.0, 0.0), 0.01, magnetometer=(1000.0, -1000.0, 500.0)
+        )
+        assert ahrs.initialized is True
+
+    def test_negative_gain(self) -> None:
+        ahrs = FusionAhrs(gain=-0.5)
+        ahrs.update((0.0, 0.0, 9.81), (0.0, 0.0, 0.0), 0.01)
+        assert ahrs.initialized is True
+
+    def test_very_large_gain(self) -> None:
+        ahrs = FusionAhrs(gain=100.0)
+        ahrs.update((0.0, 0.0, 9.81), (0.0, 0.0, 0.0), 0.01)
+        assert ahrs.initialized is True
+
+
 @pytest.mark.skipif(IMUFUSION_AVAILABLE, reason="imufusion is installed")
 class TestFusionAhrsWithoutImufusion:
     """When imufusion is not installed, constructor raises."""

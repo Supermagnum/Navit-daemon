@@ -113,3 +113,48 @@ class TestParseArgsInvalidAndEdge:
     def test_fusion_gain_one(self) -> None:
         config = parse_args(["--fusion-gain", "1"])
         assert config.fusion_gain == 1.0
+
+    def test_very_large_port(self) -> None:
+        config = parse_args(["--gpsd-port", "65535"])
+        assert config.gpsd_port == 65535
+
+    def test_port_beyond_65535(self) -> None:
+        config = parse_args(["--gpsd-port", "100000"])
+        assert config.gpsd_port == 100000
+
+    def test_zero_port(self) -> None:
+        config = parse_args(["--gpsd-port", "0"])
+        assert config.gpsd_port == 0
+
+    def test_negative_imu_rate(self) -> None:
+        config = parse_args(["--imu-rate", "-1"])
+        assert config.imu_rate_hz == -1.0
+
+    def test_zero_imu_rate(self) -> None:
+        config = parse_args(["--imu-rate", "0"])
+        assert config.imu_rate_hz == 0.0
+
+    def test_very_large_imu_rate(self) -> None:
+        config = parse_args(["--imu-rate", "10000"])
+        assert config.imu_rate_hz == 10000.0
+
+    def test_negative_output_rate(self) -> None:
+        config = parse_args(["--output-rate", "-1"])
+        assert config.output_rate_hz == -1.0
+
+    def test_zero_output_rate(self) -> None:
+        config = parse_args(["--output-rate", "0"])
+        assert config.output_rate_hz == 0.0
+
+    def test_negative_fusion_gain(self) -> None:
+        config = parse_args(["--fusion-gain", "-0.5"])
+        assert config.fusion_gain == -0.5
+
+    def test_very_large_fusion_gain(self) -> None:
+        config = parse_args(["--fusion-gain", "100"])
+        assert config.fusion_gain == 100.0
+
+    def test_empty_path_strings(self) -> None:
+        config = parse_args(["--accel-path", "", "--gyro-path", ""])
+        assert config.accel_path == ""
+        assert config.gyro_path == ""

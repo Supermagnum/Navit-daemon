@@ -84,11 +84,54 @@ class TestHandleRequestSetCalibration:
         )
         assert "error" in resp
 
+    def test_set_calibration_invalid_accel_returns_error(self) -> None:
+        cal = Calibration()
+        manager = CalibrationManager(cal)
+        resp = _handle_request(
+            manager,
+            None,
+            {"set_calibration": {"accel_offset": [1]}},
+            100.0,
+        )
+        assert "error" in resp
+
+    def test_set_calibration_invalid_magnetometer_returns_error(self) -> None:
+        cal = Calibration()
+        manager = CalibrationManager(cal)
+        resp = _handle_request(
+            manager,
+            None,
+            {"set_calibration": {"magnetometer_bias": [1, 2]}},
+            100.0,
+        )
+        assert "error" in resp
+
     def test_set_calibration_not_dict_returns_error(self) -> None:
         cal = Calibration()
         manager = CalibrationManager(cal)
         resp = _handle_request(manager, None, {"set_calibration": "x"}, 100.0)
         assert "error" in resp
+
+    def test_set_calibration_extreme_values(self) -> None:
+        cal = Calibration()
+        manager = CalibrationManager(cal)
+        resp = _handle_request(
+            manager,
+            None,
+            {
+                "set_calibration": {
+                    "gyro_bias": [1000.0, -1000.0, 500.0],
+                    "accel_offset": [100.0, -100.0, 50.0],
+                    "magnetometer_bias": [1000.0, -1000.0, 500.0],
+                }
+            },
+            100.0,
+        )
+        assert resp == {"ok": True}
+        cal_updated = manager.get_calibration()
+        assert cal_updated.gyro_bias == (1000.0, -1000.0, 500.0)
+        assert cal_updated.accel_offset == (100.0, -100.0, 50.0)
+        assert cal_updated.magnetometer_bias == (1000.0, -1000.0, 500.0)
 
 
 class TestHandleRequestCalibrateGyro:
@@ -123,6 +166,39 @@ class TestHandleRequestCalibrateGyro:
         )
         assert resp["samples_needed"] >= 1
 
+    def test_calibrate_gyro_negative_seconds_clamped(self) -> None:
+        cal = Calibration()
+        manager = CalibrationManager(cal)
+        resp = _handle_request(
+            manager,
+            None,
+            {"calibrate_gyro": {"seconds": -1.0}},
+            100.0,
+        )
+        assert resp["samples_needed"] >= 1
+
+    def test_calibrate_gyro_zero_sample_rate(self) -> None:
+        cal = Calibration()
+        manager = CalibrationManager(cal)
+        resp = _handle_request(
+            manager,
+            None,
+            {"calibrate_gyro": {"seconds": 1.0}},
+            0.0,
+        )
+        assert resp["samples_needed"] >= 1
+
+    def test_calibrate_gyro_very_large_seconds(self) -> None:
+        cal = Calibration()
+        manager = CalibrationManager(cal)
+        resp = _handle_request(
+            manager,
+            None,
+            {"calibrate_gyro": {"seconds": 1000.0}},
+            100.0,
+        )
+        assert resp["samples_needed"] > 0
+
 
 class TestHandleRequestInvalid:
     """Unknown or invalid requests return error."""
@@ -138,6 +214,23 @@ class TestHandleRequestInvalid:
         manager = CalibrationManager(cal)
         resp = _handle_request(manager, None, {"foo": "bar"}, 100.0)
         assert "error" in resp
+
+    def test_empty_request_returns_error(self) -> None:
+        cal = Calibration()
+        manager = CalibrationManager(cal)
+        resp = _handle_request(manager, None, {}, 100.0)
+        assert "error" in resp
+
+    def test_set_calibration_empty_dict(self) -> None:
+        cal = Calibration()
+        manager = CalibrationManager(cal)
+        resp = _handle_request(
+            manager,
+            None,
+            {"set_calibration": {}},
+            100.0,
+        )
+        assert resp == {"ok": True}
 
 
 class TestCalibrationManagerGyroCollection:

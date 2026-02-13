@@ -2,6 +2,8 @@
 Unit tests for remote source JSON parsing: valid, invalid, and edge cases.
 """
 
+import pytest
+
 from navit_daemon.sources.remote import RemoteSource
 
 
@@ -108,6 +110,34 @@ class TestRemoteSourceParseLineInvalid:
         source._parse_line('{"lat":52.0}')
         assert source.get_fix() is None
 
+    def test_magnetometer_short_list_ignored(self) -> None:
+        source = RemoteSource(host="127.0.0.1", port=0)
+        source._parse_line('{"accel":[0,0,9.81],"gyro":[0,0,0],"magnetometer":[1,2]}')
+        sample = source.read()
+        assert sample is not None
+        accel, gyro, magnetometer = sample
+        assert magnetometer is None
+
+    def test_magnetometer_not_list_ignored(self) -> None:
+        source = RemoteSource(host="127.0.0.1", port=0)
+        source._parse_line('{"accel":[0,0,9.81],"gyro":[0,0,0],"magnetometer":"not a list"}')
+        sample = source.read()
+        assert sample is not None
+        accel, gyro, magnetometer = sample
+        assert magnetometer is None
+
+    def test_magnetometer_alone_not_stored(self) -> None:
+        source = RemoteSource(host="127.0.0.1", port=0)
+        source._parse_line('{"magnetometer":[10,20,30]}')
+        assert source.read() is None
+
+    def test_magnetometer_invalid_numeric_raises_value_error(self) -> None:
+        source = RemoteSource(host="127.0.0.1", port=0)
+        with pytest.raises(ValueError):
+            source._parse_line(
+                '{"accel":[0,0,9.81],"gyro":[0,0,0],"magnetometer":["not a number",20,30]}'
+            )
+
 
 class TestRemoteSourceParseLineEdgeCases:
     """Edge cases for remote protocol."""
@@ -121,6 +151,16 @@ class TestRemoteSourceParseLineEdgeCases:
         assert accel == (0.1, 0.2, 9.81)
         assert gyro == (0.0, 0.0, 0.0)
         assert magnetometer is None
+
+    def test_magnetometer_numeric_strings_converted(self) -> None:
+        source = RemoteSource(host="127.0.0.1", port=0)
+        source._parse_line(
+            '{"accel":[0,0,9.81],"gyro":[0,0,0],"magnetometer":["10","20","30"]}'
+        )
+        sample = source.read()
+        assert sample is not None
+        accel, gyro, magnetometer = sample
+        assert magnetometer == (10.0, 20.0, 30.0)
 
     def test_time_iso_non_string_set_to_none(self) -> None:
         source = RemoteSource(host="127.0.0.1", port=0)
@@ -149,3 +189,29 @@ class TestRemoteSourceParseLineEdgeCases:
         source._parse_line('{"accel":[1,1,10],"gyro":[1,1,1]}')
         sample = source.read()
         assert sample == ((1.0, 1.0, 10.0), (1.0, 1.0, 1.0), None)
+
+    def test_latest_magnetometer_overwrites_previous(self) -> None:
+        source = RemoteSource(host="127.0.0.1", port=0)
+        source._parse_line(
+            '{"accel":[0,0,9.81],"gyro":[0,0,0],"magnetometer":[10,20,30]}'
+        )
+        source._parse_line(
+            '{"accel":[0,0,9.81],"gyro":[0,0,0],"magnetometer":[40,50,60]}'
+        )
+        sample = source.read()
+        assert sample is not None
+        accel, gyro, magnetometer = sample
+        assert magnetometer == (40.0, 50.0, 60.0)
+
+    def test_magnetometer_persists_when_not_in_update(self) -> None:
+        source = RemoteSource(host="127.0.0.1", port=0)
+        source._parse_line(
+            '{"accel":[0,0,9.81],"gyro":[0,0,0],"magnetometer":[10,20,30]}'
+        )
+        sample1 = source.read()
+        assert sample1 is not None
+        assert sample1[2] == (10.0, 20.0, 30.0)
+        source._parse_line('{"accel":[0,0,9.81],"gyro":[0,0,0]}')
+        sample2 = source.read()
+        assert sample2 is not None
+        assert sample2[2] == (10.0, 20.0, 30.0)

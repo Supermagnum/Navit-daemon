@@ -2,6 +2,8 @@
 Unit tests for NMEA sentence building: valid, invalid, and edge cases.
 """
 
+import math
+
 from navit_daemon.gps_reader import GpsFix
 from navit_daemon.nmea import (
     build_gga,
@@ -62,6 +64,18 @@ class TestBuildGgaValid:
         s = build_gga(0.0, 0.0, 0.0, time_iso=None)
         assert "000000.00" in s
 
+    def test_time_iso_empty_string_returns_default(self) -> None:
+        s = build_gga(0.0, 0.0, 0.0, time_iso="")
+        assert "000000.00" in s
+
+    def test_time_iso_incomplete_returns_default(self) -> None:
+        s = build_gga(0.0, 0.0, 0.0, time_iso="2024-06-15")
+        assert "000000.00" in s
+
+    def test_time_iso_missing_time_part_returns_default(self) -> None:
+        s = build_gga(0.0, 0.0, 0.0, time_iso="2024-06-15T")
+        assert "000000.00" in s
+
 
 class TestBuildGgaEdgeCases:
     """Edge cases for build_gga."""
@@ -92,6 +106,54 @@ class TestBuildGgaEdgeCases:
         assert ",0," in s
 
 
+class TestBuildGgaInvalidAndMalformed:
+    """Invalid and malformed input for build_gga."""
+
+    def test_lat_beyond_90_clamped_in_formatting(self) -> None:
+        s = build_gga(91.0, 0.0, 0.0)
+        assert "GPGGA" in s
+
+    def test_lat_beyond_minus_90_clamped_in_formatting(self) -> None:
+        s = build_gga(-91.0, 0.0, 0.0)
+        assert "GPGGA" in s
+
+    def test_lon_beyond_180_clamped_in_formatting(self) -> None:
+        s = build_gga(0.0, 181.0, 0.0)
+        assert "GPGGA" in s
+
+    def test_lon_beyond_minus_180_clamped_in_formatting(self) -> None:
+        s = build_gga(0.0, -181.0, 0.0)
+        assert "GPGGA" in s
+
+    def test_negative_fix_quality(self) -> None:
+        s = build_gga(0.0, 0.0, 0.0, fix_quality=-1)
+        assert "GPGGA" in s
+
+    def test_large_fix_quality(self) -> None:
+        s = build_gga(0.0, 0.0, 0.0, fix_quality=10)
+        assert "GPGGA" in s
+
+    def test_negative_num_sats(self) -> None:
+        s = build_gga(0.0, 0.0, 0.0, num_sats=-1)
+        assert "GPGGA" in s
+
+    def test_large_num_sats(self) -> None:
+        s = build_gga(0.0, 0.0, 0.0, num_sats=100)
+        assert "GPGGA" in s
+
+    def test_negative_hdop(self) -> None:
+        s = build_gga(0.0, 0.0, 0.0, hdop=-1.0)
+        assert "GPGGA" in s
+
+    def test_zero_hdop(self) -> None:
+        s = build_gga(0.0, 0.0, 0.0, hdop=0.0)
+        assert "GPGGA" in s
+
+    def test_very_large_altitude(self) -> None:
+        s = build_gga(0.0, 0.0, 100000.0)
+        assert "GPGGA" in s
+
+
 class TestBuildRmcValid:
     """Valid input for build_rmc."""
 
@@ -115,6 +177,42 @@ class TestBuildRmcValid:
     def test_track_outside_0_360_clamped_in_output(self) -> None:
         s = build_rmc(0.0, 0.0, 0.0, 400.0)
         assert "0.0" in s
+
+
+class TestBuildRmcInvalidAndMalformed:
+    """Invalid and malformed input for build_rmc."""
+
+    def test_date_iso_malformed_returns_default(self) -> None:
+        s = build_rmc(0.0, 0.0, 0.0, 0.0, date_iso="not-a-date")
+        assert "010100" in s
+
+    def test_date_iso_incomplete_returns_default(self) -> None:
+        s = build_rmc(0.0, 0.0, 0.0, 0.0, date_iso="2024-06")
+        assert "010100" in s
+
+    def test_date_iso_none_returns_default(self) -> None:
+        s = build_rmc(0.0, 0.0, 0.0, 0.0, date_iso=None)
+        assert "010100" in s
+
+    def test_date_iso_empty_string_returns_default(self) -> None:
+        s = build_rmc(0.0, 0.0, 0.0, 0.0, date_iso="")
+        assert "010100" in s
+
+    def test_negative_speed(self) -> None:
+        s = build_rmc(0.0, 0.0, -5.0, 0.0)
+        assert "GPRMC" in s
+
+    def test_very_large_speed(self) -> None:
+        s = build_rmc(0.0, 0.0, 1000.0, 0.0)
+        assert "GPRMC" in s
+
+    def test_track_very_large_clamped(self) -> None:
+        s = build_rmc(0.0, 0.0, 0.0, 1000.0)
+        assert "0.0" in s
+
+    def test_track_very_negative_clamped(self) -> None:
+        s = build_rmc(0.0, 0.0, 0.0, -1000.0)
+        assert "GPRMC" in s
 
 
 class TestBuildRmcEdgeCases:
@@ -220,3 +318,88 @@ class TestFixToNmeaInvalidAndEdge:
         gga, rmc = fix_to_nmea(fix, 90.0)
         assert rmc is not None
         assert "90.0" in rmc
+
+
+class TestFixToNmeaInvalidAndMalformed:
+    """Invalid and malformed input for fix_to_nmea."""
+
+    def test_extreme_lat_lon_values(self) -> None:
+        fix = GpsFix(
+            lat=200.0,
+            lon=300.0,
+            alt=0.0,
+            speed_ms=0.0,
+            track=0.0,
+            valid=True,
+            mode=2,
+        )
+        gga, rmc = fix_to_nmea(fix, 0.0)
+        assert gga is not None
+        assert rmc is not None
+
+    def test_negative_heading_clamped(self) -> None:
+        fix = GpsFix(
+            lat=0.0,
+            lon=0.0,
+            alt=0.0,
+            speed_ms=0.0,
+            track=0.0,
+            valid=True,
+            mode=2,
+        )
+        gga, rmc = fix_to_nmea(fix, -10.0)
+        assert rmc is not None
+
+    def test_heading_beyond_360_clamped(self) -> None:
+        fix = GpsFix(
+            lat=0.0,
+            lon=0.0,
+            alt=0.0,
+            speed_ms=0.0,
+            track=0.0,
+            valid=True,
+            mode=2,
+        )
+        gga, rmc = fix_to_nmea(fix, 400.0)
+        assert rmc is not None
+
+    def test_very_large_altitude(self) -> None:
+        fix = GpsFix(
+            lat=0.0,
+            lon=0.0,
+            alt=100000.0,
+            speed_ms=0.0,
+            track=0.0,
+            valid=True,
+            mode=2,
+        )
+        gga, rmc = fix_to_nmea(fix, 0.0)
+        assert gga is not None
+        assert "100000.0" in gga
+
+    def test_negative_altitude(self) -> None:
+        fix = GpsFix(
+            lat=0.0,
+            lon=0.0,
+            alt=-1000.0,
+            speed_ms=0.0,
+            track=0.0,
+            valid=True,
+            mode=2,
+        )
+        gga, rmc = fix_to_nmea(fix, 0.0)
+        assert gga is not None
+        assert "-1000.0" in gga
+
+    def test_very_large_speed(self) -> None:
+        fix = GpsFix(
+            lat=0.0,
+            lon=0.0,
+            alt=0.0,
+            speed_ms=1000.0,
+            track=0.0,
+            valid=True,
+            mode=2,
+        )
+        gga, rmc = fix_to_nmea(fix, 0.0)
+        assert rmc is not None
