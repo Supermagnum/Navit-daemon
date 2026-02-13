@@ -47,12 +47,15 @@ class CalibrationManager:
         self,
         gyro_bias: Optional[Tuple[float, float, float]] = None,
         accel_offset: Optional[Tuple[float, float, float]] = None,
+        magnetometer_bias: Optional[Tuple[float, float, float]] = None,
     ) -> None:
         with self._lock:
             if gyro_bias is not None:
                 self._calibration.gyro_bias = gyro_bias
             if accel_offset is not None:
                 self._calibration.accel_offset = accel_offset
+            if magnetometer_bias is not None:
+                self._calibration.magnetometer_bias = magnetometer_bias
 
     def start_gyro_calibration(self, seconds: float, sample_rate_hz: float) -> int:
         """
@@ -102,6 +105,7 @@ class CalibrationManager:
             return {
                 "gyro_bias": list(self._calibration.gyro_bias),
                 "accel_offset": list(self._calibration.accel_offset),
+                "magnetometer_bias": list(self._calibration.magnetometer_bias),
                 "calibration_status": status,
                 "samples_collected": len(self._gyro_samples),
                 "samples_needed": self._samples_needed,
@@ -127,6 +131,7 @@ def _handle_request(  # noqa: C901
             return {"error": "set_calibration must be an object"}
         gyro_bias = set_cal.get("gyro_bias")
         accel_offset = set_cal.get("accel_offset")
+        magnetometer_bias = set_cal.get("magnetometer_bias")
         if gyro_bias is not None:
             if not isinstance(gyro_bias, (list, tuple)) or len(gyro_bias) < 3:
                 return {"error": "gyro_bias must be [x,y,z]"}
@@ -139,7 +144,22 @@ def _handle_request(  # noqa: C901
                 float(accel_offset[1]),
                 float(accel_offset[2]),
             )
-        manager.set_calibration(gyro_bias=gyro_bias, accel_offset=accel_offset)
+        if magnetometer_bias is not None:
+            if (
+                not isinstance(magnetometer_bias, (list, tuple))
+                or len(magnetometer_bias) < 3
+            ):
+                return {"error": "magnetometer_bias must be [x,y,z]"}
+            magnetometer_bias = (
+                float(magnetometer_bias[0]),
+                float(magnetometer_bias[1]),
+                float(magnetometer_bias[2]),
+            )
+        manager.set_calibration(
+            gyro_bias=gyro_bias,
+            accel_offset=accel_offset,
+            magnetometer_bias=magnetometer_bias,
+        )
         if save_path:
             save_calibration(save_path, manager.get_calibration())
         return {"ok": True}

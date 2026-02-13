@@ -7,21 +7,21 @@ This document records the outcome of running the Navit-daemon test suite.
 - **Date:** 2025-02-12 (generated from test run)
 - **Platform:** Linux, Python 3.12.3
 - **Test framework:** pytest 9.0.2
-- **Result:** 89 passed, 9 skipped
-- **Duration:** ~0.08s
+- **Result:** 93 passed, 9 skipped
+- **Duration:** ~0.07s
 
 ## Summary by Module
 
 | Module | Passed | Skipped | Total |
 |--------|--------|---------|-------|
-| test_calibration.py | 13 | 0 | 13 |
-| test_calibration_api.py | 14 | 0 | 14 |
+| test_calibration.py | 15 | 0 | 15 |
+| test_calibration_api.py | 15 | 0 | 15 |
 | test_config.py | 18 | 0 | 18 |
 | test_fusion_ahrs.py | 1 | 9 | 10 |
 | test_nmea.py | 28 | 0 | 28 |
 | test_sources_calibrated.py | 3 | 0 | 3 |
-| test_sources_remote.py | 14 | 0 | 14 |
-| **Total** | **89** | **9** | **98** |
+| test_sources_remote.py | 15 | 0 | 15 |
+| **Total** | **93** | **9** | **102** |
 
 ## Why some tests are skipped
 
@@ -37,24 +37,24 @@ The 9 skipped tests are in `test_fusion_ahrs.py`. When `imufusion` is installed,
 
 ## Results by Test File
 
-### tests/test_calibration.py (13 passed)
+### tests/test_calibration.py (15 passed)
 
-- **TestCalibrationApply:** apply_gyro/apply_accel with default and explicit bias/offset.
-- **TestCalibrationFromDict:** from_dict valid, partial, invalid; to_dict roundtrip.
-- **TestLoadSaveCalibration:** load missing/None returns default; save and load roundtrip; invalid JSON returns default.
+- **TestCalibrationApply:** apply_gyro/apply_accel/apply_magnetometer with default and explicit bias/offset.
+- **TestCalibrationFromDict:** from_dict valid (includes magnetometer_bias), partial, invalid; to_dict roundtrip.
+- **TestLoadSaveCalibration:** load missing/None returns default; save and load roundtrip (includes magnetometer_bias); invalid JSON returns default.
 
-### tests/test_calibration_api.py (14 passed)
+### tests/test_calibration_api.py (15 passed)
 
-- **TestHandleRequestGetCalibration:** get_calibration returns current; status when collecting.
-- **TestHandleRequestSetCalibration:** set gyro/accel; invalid input returns error.
+- **TestHandleRequestGetCalibration:** get_calibration returns current (includes magnetometer_bias); status when collecting.
+- **TestHandleRequestSetCalibration:** set gyro/accel/magnetometer; invalid input returns error.
 - **TestHandleRequestCalibrateGyro:** calibrate_gyro returns collecting and samples_needed; default and clamped seconds.
 - **TestHandleRequestInvalid:** not dict and unknown request return error.
 - **TestCalibrationManagerGyroCollection:** add_gyro_sample until done sets bias; saves to file when save_path set.
 
 ### tests/test_config.py (18 passed)
 
-- **TestParseArgsDefaults:** empty args use defaults (including calibration_file None, calibration_port 0); --help exits.
-- **TestParseArgsValid:** source (remote, auto), gpsd host/port, remote port, NMEA bind, IMU/output rate, fusion gain, accel/gyro paths, calibration-file and calibration-port, debug flag.
+- **TestParseArgsDefaults:** empty args use defaults (including calibration_file None, calibration_port 0, magnetometer_path None); --help exits.
+- **TestParseArgsValid:** source (remote, auto), gpsd host/port, remote port, NMEA bind, IMU/output rate, fusion gain, accel/gyro/magnetometer paths, calibration-file and calibration-port, debug flag.
 - **TestParseArgsInvalidAndEdge:** invalid source rejected; invalid port type; negative port; fusion gain 0 and 1 accepted.
 
 ### tests/test_fusion_ahrs.py (1 passed, 9 skipped)
@@ -75,13 +75,13 @@ The 9 skipped tests are in `test_fusion_ahrs.py`. When `imufusion` is installed,
 
 ### tests/test_sources_calibrated.py (3 passed)
 
-- **test_calibrated_applies_bias_and_offset:** wrapper applies calibration to sample.
+- **test_calibrated_applies_bias_and_offset:** wrapper applies calibration to sample (including magnetometer bias).
 - **test_calibrated_returns_none_when_inner_returns_none:** pass-through None.
 - **test_calibrated_with_manager_feeds_gyro_on_read:** when manager set, raw gyro fed to manager; after enough samples bias updated.
 
-### tests/test_sources_remote.py (14 passed)
+### tests/test_sources_remote.py (15 passed)
 
-- **TestRemoteSourceParseLineValid:** IMU-only updates read(); GPS-only updates get_fix(); combined IMU+GPS; minimal GPS keys.
+- **TestRemoteSourceParseLineValid:** IMU with magnetometer; IMU-only updates read(); GPS-only updates get_fix(); combined IMU+GPS; minimal GPS keys.
 - **TestRemoteSourceParseLineInvalid:** empty line ignored; invalid/non-JSON ignored; IMU missing gyro or short list not stored; GPS missing lon ignored.
 - **TestRemoteSourceParseLineEdgeCases:** numeric strings converted; time_iso non-string set to None; read before parse returns None; latest GPS/IMU overwrites previous.
 

@@ -1,5 +1,7 @@
 """
-IMU source wrapper that applies calibration (gyro bias, accel offset).
+IMU source wrapper that applies calibration.
+
+Calibration includes: gyro bias, accel offset, magnetometer bias.
 """
 
 from typing import Callable, Optional, TYPE_CHECKING
@@ -34,8 +36,15 @@ class CalibratedIMUSource(IMUSource):
         sample = self._inner.read()
         if sample is None:
             return None
-        accel, gyro = sample
+        accel, gyro, magnetometer = sample
         if self._manager:
             self._manager.add_gyro_sample(gyro)
         cal = self._get_calibration()
-        return (cal.apply_accel(accel), cal.apply_gyro(gyro))
+        calibrated_magnetometer = None
+        if magnetometer is not None:
+            calibrated_magnetometer = cal.apply_magnetometer(magnetometer)
+        return (
+            cal.apply_accel(accel),
+            cal.apply_gyro(gyro),
+            calibrated_magnetometer,
+        )

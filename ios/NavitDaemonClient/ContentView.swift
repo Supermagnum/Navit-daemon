@@ -81,6 +81,7 @@ class DaemonClient: NSObject, ObservableObject, CLLocationManagerDelegate {
     func disconnect() {
         motionManager.stopAccelerometerUpdates()
         motionManager.stopGyroUpdates()
+        motionManager.stopMagnetometerUpdates()
         locationManager.stopUpdatingLocation()
         outputStream?.close()
         outputStream = nil
@@ -98,17 +99,28 @@ class DaemonClient: NSObject, ObservableObject, CLLocationManagerDelegate {
             guard let self = self, let gyro = data?.rotationRate else { return }
             self.sendIMUData(gyro: gyro)
         }
+        
+        if motionManager.isMagnetometerAvailable {
+            motionManager.startMagnetometerUpdates(to: .main) { [weak self] data, error in
+                guard let self = self, let mag = data?.magneticField else { return }
+                self.sendIMUData(magnetometer: mag)
+            }
+        }
     }
     
     private var lastAccel: CMAcceleration?
     private var lastGyro: CMRotationRate?
+    private var lastMagnetometer: CMMagneticField?
     
-    private func sendIMUData(accel: CMAcceleration? = nil, gyro: CMRotationRate? = nil) {
+    private func sendIMUData(accel: CMAcceleration? = nil, gyro: CMRotationRate? = nil, magnetometer: CMMagneticField? = nil) {
         if let accel = accel {
             lastAccel = accel
         }
         if let gyro = gyro {
             lastGyro = gyro
+        }
+        if let magnetometer = magnetometer {
+            lastMagnetometer = magnetometer
         }
         
         guard let accel = lastAccel, let gyro = lastGyro,
@@ -121,12 +133,24 @@ class DaemonClient: NSObject, ObservableObject, CLLocationManagerDelegate {
             gyro.z * 180.0 / .pi
         ]
         
-        let json = String(format: """
-            {"accel":[%.6f,%.6f,%.6f],"gyro":[%.6f,%.6f,%.6f]}
-            """,
-            accelMps2[0], accelMps2[1], accelMps2[2],
-            gyroDegPerS[0], gyroDegPerS[1], gyroDegPerS[2]
-        )
+        let json: String
+        if let mag = lastMagnetometer {
+            let magUt = [mag.x, mag.y, mag.z]
+            json = String(format: """
+                {"accel":[%.6f,%.6f,%.6f],"gyro":[%.6f,%.6f,%.6f],"magnetometer":[%.6f,%.6f,%.6f]}
+                """,
+                accelMps2[0], accelMps2[1], accelMps2[2],
+                gyroDegPerS[0], gyroDegPerS[1], gyroDegPerS[2],
+                magUt[0], magUt[1], magUt[2]
+            )
+        } else {
+            json = String(format: """
+                {"accel":[%.6f,%.6f,%.6f],"gyro":[%.6f,%.6f,%.6f]}
+                """,
+                accelMps2[0], accelMps2[1], accelMps2[2],
+                gyroDegPerS[0], gyroDegPerS[1], gyroDegPerS[2]
+            )
+        }
         
         if let data = json.data(using: .utf8) {
             let bytes = data.withUnsafeBytes { $0.bindMemory(to: UInt8.self) }

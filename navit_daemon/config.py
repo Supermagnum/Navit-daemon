@@ -23,6 +23,7 @@ class Config:
     fusion_gain: float = 0.5
     accel_path: Optional[str] = None
     gyro_path: Optional[str] = None
+    magnetometer_path: Optional[str] = None
     calibration_file: Optional[str] = None
     calibration_port: int = 0
     debug: bool = False
@@ -101,6 +102,11 @@ def parse_args(args: Optional[list] = None) -> Config:
         help="IIO sysfs path for gyroscope (default: auto-detect)",
     )
     parser.add_argument(
+        "--magnetometer-path",
+        default=None,
+        help="IIO sysfs path for magnetometer (default: auto-detect, optional)",
+    )
+    parser.add_argument(
         "--calibration-file",
         default=None,
         help="Load/save calibration from JSON file (optional)",
@@ -130,6 +136,7 @@ def parse_args(args: Optional[list] = None) -> Config:
         fusion_gain=parsed.fusion_gain,
         accel_path=parsed.accel_path,
         gyro_path=parsed.gyro_path,
+        magnetometer_path=parsed.magnetometer_path,
         calibration_file=parsed.calibration_file,
         calibration_port=parsed.calibration_port,
         debug=parsed.debug,

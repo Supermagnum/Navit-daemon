@@ -59,6 +59,7 @@ def run(config: Config) -> int:  # noqa: C901
             config.gpsd_port,
             config.accel_path,
             config.gyro_path,
+            config.magnetometer_path,
         )
         if sources:
             source_mode = "linux"
@@ -79,6 +80,7 @@ def run(config: Config) -> int:  # noqa: C901
             config.gpsd_port,
             config.accel_path,
             config.gyro_path,
+            config.magnetometer_path,
         )
         if not sources:
             logger.error(
@@ -155,8 +157,8 @@ def run(config: Config) -> int:  # noqa: C901
             while (time.monotonic() - last_imu_time) >= imu_dt and not _shutdown:
                 sample = imu_source.read() if imu_source else None
                 if sample:
-                    accel, gyro = sample
-                    fusion.update(accel, gyro, imu_dt)
+                    accel, gyro, magnetometer = sample
+                    fusion.update(accel, gyro, imu_dt, magnetometer=magnetometer)
                 last_imu_time += imu_dt
             if last_imu_time < now:
                 last_imu_time = now

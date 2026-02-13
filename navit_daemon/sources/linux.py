@@ -10,6 +10,7 @@ from navit_daemon.iio_reader import (
     IIOReader,
     find_accel_device,
     find_gyro_device,
+    find_magnetometer_device,
 )
 from navit_daemon.sources.base import GPSSource, IMUSource, IMUSample
 
@@ -26,7 +27,8 @@ class LinuxIMUSource(IMUSource):
         accel = self._reader.read_accel()
         gyro = self._reader.read_gyro()
         if accel and gyro:
-            return (accel, gyro)
+            magnetometer = self._reader.read_magnetometer()
+            return (accel, gyro, magnetometer)
         return None
 
 
@@ -45,11 +47,13 @@ def create_linux_sources(
     gpsd_port: int,
     accel_path_str: Optional[str] = None,
     gyro_path_str: Optional[str] = None,
+    magnetometer_path_str: Optional[str] = None,
 ) -> Optional[Tuple[LinuxIMUSource, LinuxGPSSource]]:
     """
     Create Linux IIO + gpsd sources.
 
     Returns (IMUSource, GPSSource) or None if IIO accel/gyro not found.
+    Magnetometer is optional; if not found, magnetometer will be None in samples.
     gpsd may be unavailable; GPSSource will then return None from get_fix().
     """
     gpsd = connect_gpsd(gpsd_host, gpsd_port)
@@ -59,5 +63,12 @@ def create_linux_sources(
     gyro_path = find_gyro_device(gyro_path_str, accel_path)
     if not accel_path or not gyro_path:
         return None
-    reader = IIOReader(accel_path=accel_path, gyro_path=gyro_path)
+    magnetometer_path = find_magnetometer_device(magnetometer_path_str, accel_path)
+    if magnetometer_path:
+        logger.info("Magnetometer found at %s", magnetometer_path)
+    reader = IIOReader(
+        accel_path=accel_path,
+        gyro_path=gyro_path,
+        magnetometer_path=magnetometer_path,
+    )
     return (LinuxIMUSource(reader), LinuxGPSSource(gpsd))

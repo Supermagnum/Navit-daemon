@@ -22,6 +22,7 @@ class TestHandleRequestGetCalibration:
         resp = _handle_request(manager, None, {"get_calibration": True}, 100.0)
         assert resp["gyro_bias"] == [0.1, 0.2, 0.3]
         assert resp["accel_offset"] == [0.0, 0.0, 0.1]
+        assert "magnetometer_bias" in resp
         assert resp["calibration_status"] == "idle"
 
     def test_get_calibration_when_collecting(self) -> None:
@@ -59,6 +60,18 @@ class TestHandleRequestSetCalibration:
         )
         assert resp == {"ok": True}
         assert manager.get_calibration().accel_offset == (0.1, 0.0, 0.0)
+
+    def test_set_calibration_magnetometer_only(self) -> None:
+        cal = Calibration()
+        manager = CalibrationManager(cal)
+        resp = _handle_request(
+            manager,
+            None,
+            {"set_calibration": {"magnetometer_bias": [1.0, 2.0, 3.0]}},
+            100.0,
+        )
+        assert resp == {"ok": True}
+        assert manager.get_calibration().magnetometer_bias == (1.0, 2.0, 3.0)
 
     def test_set_calibration_invalid_gyro_returns_error(self) -> None:
         cal = Calibration()

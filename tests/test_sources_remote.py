@@ -8,14 +8,28 @@ from navit_daemon.sources.remote import RemoteSource
 class TestRemoteSourceParseLineValid:
     """Valid JSON input for remote protocol."""
 
+    def test_imu_with_magnetometer(self) -> None:
+        source = RemoteSource(host="127.0.0.1", port=0)
+        source._parse_line(
+            '{"accel":[0.0,0.0,9.81],"gyro":[0.0,0.0,0.0],'
+            '"magnetometer":[10.0,20.0,30.0]}'
+        )
+        sample = source.read()
+        assert sample is not None
+        accel, gyro, magnetometer = sample
+        assert accel == (0.0, 0.0, 9.81)
+        assert gyro == (0.0, 0.0, 0.0)
+        assert magnetometer == (10.0, 20.0, 30.0)
+
     def test_imu_only_updates_read(self) -> None:
         source = RemoteSource(host="127.0.0.1", port=0)
         source._parse_line('{"accel":[0.0, 0.0, 9.81], "gyro":[0.0, 0.0, 0.0]}')
         sample = source.read()
         assert sample is not None
-        accel, gyro = sample
+        accel, gyro, magnetometer = sample
         assert accel == (0.0, 0.0, 9.81)
         assert gyro == (0.0, 0.0, 0.0)
+        assert magnetometer is None
 
     def test_gps_only_updates_get_fix(self) -> None:
         source = RemoteSource(host="127.0.0.1", port=0)
@@ -39,7 +53,8 @@ class TestRemoteSourceParseLineValid:
             '{"accel":[1,2,3],"gyro":[0.1,0.2,0.3],'
             '"lat":0,"lon":0,"alt":0,"speed_ms":0,"track":0}'
         )
-        assert source.read() == ((1.0, 2.0, 3.0), (0.1, 0.2, 0.3))
+        sample = source.read()
+        assert sample == ((1.0, 2.0, 3.0), (0.1, 0.2, 0.3), None)
         fix = source.get_fix()
         assert fix is not None
         assert fix.lat == 0.0
@@ -102,9 +117,10 @@ class TestRemoteSourceParseLineEdgeCases:
         source._parse_line('{"accel":["0.1","0.2","9.81"],"gyro":["0","0","0"]}')
         sample = source.read()
         assert sample is not None
-        accel, gyro = sample
+        accel, gyro, magnetometer = sample
         assert accel == (0.1, 0.2, 9.81)
         assert gyro == (0.0, 0.0, 0.0)
+        assert magnetometer is None
 
     def test_time_iso_non_string_set_to_none(self) -> None:
         source = RemoteSource(host="127.0.0.1", port=0)
@@ -132,4 +148,4 @@ class TestRemoteSourceParseLineEdgeCases:
         source._parse_line('{"accel":[0,0,9.81],"gyro":[0,0,0]}')
         source._parse_line('{"accel":[1,1,10],"gyro":[1,1,1]}')
         sample = source.read()
-        assert sample == ((1.0, 1.0, 10.0), (1.0, 1.0, 1.0))
+        assert sample == ((1.0, 1.0, 10.0), (1.0, 1.0, 1.0), None)

@@ -1,5 +1,17 @@
 # Navit-daemon
 
+A daemon that integrates accelerometer, gyroscope, magnetometer (digital compass), and GPS data into a unified NMEA output with AHRS-derived heading. It fuses inertial measurement unit (IMU) sensors with GPS position to provide continuous heading information even when GPS course-over-ground is unavailable or inaccurate (e.g., when stationary, in tunnels, or in urban canyons).
+
+**Sensors integrated:**
+- **Accelerometer** (3-axis): Provides gravity and motion acceleration in m/s²
+- **Gyroscope** (3-axis): Provides angular velocity in deg/s
+- **Magnetometer** (3-axis, digital compass): Provides magnetic field strength in microtesla (uT); optional but recommended for accurate heading and drift prevention
+- **GPS**: Provides position (lat/lon/alt), speed, and course-over-ground
+
+The daemon uses AHRS (Attitude and Heading Reference System) fusion to compute orientation (roll, pitch, yaw) from accelerometer, gyroscope, and optionally magnetometer data. When magnetometer is available, it improves heading accuracy and prevents drift. The yaw angle is used as heading and combined with GPS position to output standard NMEA sentences (GGA, RMC) over TCP for navigation applications like Navit.
+
+**Magnetometer support:** Magnetometer is optional but recommended. If unavailable, the daemon falls back to gyroscope + accelerometer fusion (which may drift over time). On Linux, use `--magnetometer-path` to specify the IIO device, or it will be auto-detected. Android/iOS clients send magnetometer data when available. Magnetometer calibration (bias) can be set via the calibration API.
+
 ## Sensor APIs by platform (compass, gyro, accelerometer)
 
 How Android, iPhone, and the Toughpad FZ-G1 expose and use the digital compass (magnetometer), gyroscope, and accelerometer.
@@ -125,7 +137,7 @@ echo '{"calibrate_gyro": {"seconds": 5}}' | nc -q 1 127.0.0.1 2950
 
 **Android and iPhone: yes, via remote.** Run the daemon on a Linux host with `--source=remote`. An Android or iOS app reads device sensors and GPS, then sends JSON over TCP to the daemon; the daemon fuses and outputs NMEA. All three platforms supported: Linux natively, Android and iOS as TCP clients.
 
-**Remote protocol.** With `--source=remote`, the daemon listens on `--remote-port` (default 2949). Client sends newline-delimited JSON: IMU `{"accel":[x,y,z],"gyro":[x,y,z]}` (m/s^2, deg/s), GPS `{"lat":float,"lon":float,"alt":float,"speed_ms":float,"track":float,"time_iso":str|null}`. One line can contain both keys.
+**Remote protocol.** With `--source=remote`, the daemon listens on `--remote-port` (default 2949). Client sends newline-delimited JSON: IMU `{"accel":[x,y,z],"gyro":[x,y,z],"magnetometer":[x,y,z]}` (accel m/s^2, gyro deg/s, magnetometer uT; magnetometer is optional), GPS `{"lat":float,"lon":float,"alt":float,"speed_ms":float,"track":float,"time_iso":str|null}`. One line can contain all keys.
 
 For in-app fusion on Android or iOS without the daemon, use the platform APIs (SensorManager rotation vector, Core Motion device motion) inside Navit’s platform-specific vehicle code using the APIs described in the Comparison table above.
 

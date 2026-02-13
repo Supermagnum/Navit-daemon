@@ -35,36 +35,56 @@ class TestCalibrationApply:
         assert out[0] == -0.1 and out[1] == 0.0
         assert out[2] == pytest.approx(9.61)
 
+    def test_apply_magnetometer_default_zero(self) -> None:
+        cal = Calibration()
+        assert cal.apply_magnetometer((10.0, 20.0, 30.0)) == (10.0, 20.0, 30.0)
+
+    def test_apply_magnetometer_subtracts_bias(self) -> None:
+        cal = Calibration(magnetometer_bias=(1.0, 2.0, 3.0))
+        assert cal.apply_magnetometer((10.0, 20.0, 30.0)) == (9.0, 18.0, 27.0)
+
 
 class TestCalibrationFromDict:
     """from_dict and to_dict round-trip and handle invalid input."""
 
     def test_from_dict_valid(self) -> None:
-        data = {"gyro_bias": [0.1, 0.2, 0.3], "accel_offset": [1.0, 0.0, 0.0]}
+        data = {
+            "gyro_bias": [0.1, 0.2, 0.3],
+            "accel_offset": [1.0, 0.0, 0.0],
+            "magnetometer_bias": [0.5, 0.5, 0.5],
+        }
         cal = Calibration.from_dict(data)
         assert cal.gyro_bias == (0.1, 0.2, 0.3)
         assert cal.accel_offset == (1.0, 0.0, 0.0)
+        assert cal.magnetometer_bias == (0.5, 0.5, 0.5)
 
     def test_from_dict_partial(self) -> None:
         cal = Calibration.from_dict({"gyro_bias": [1, 2, 3]})
         assert cal.gyro_bias == (1.0, 2.0, 3.0)
         assert cal.accel_offset == (0.0, 0.0, 0.0)
+        assert cal.magnetometer_bias == (0.0, 0.0, 0.0)
 
     def test_from_dict_invalid_returns_default(self) -> None:
         cal = Calibration.from_dict("not a dict")
         assert cal.gyro_bias == (0.0, 0.0, 0.0)
         assert cal.accel_offset == (0.0, 0.0, 0.0)
+        assert cal.magnetometer_bias == (0.0, 0.0, 0.0)
 
     def test_from_dict_short_list_returns_default(self) -> None:
         cal = Calibration.from_dict({"gyro_bias": [1, 2]})
         assert cal.gyro_bias == (0.0, 0.0, 0.0)
 
     def test_to_dict_roundtrip(self) -> None:
-        cal = Calibration(gyro_bias=(0.1, -0.1, 0.0), accel_offset=(0.0, 0.0, 0.1))
+        cal = Calibration(
+            gyro_bias=(0.1, -0.1, 0.0),
+            accel_offset=(0.0, 0.0, 0.1),
+            magnetometer_bias=(1.0, 2.0, 3.0),
+        )
         data = cal.to_dict()
         cal2 = Calibration.from_dict(data)
         assert cal2.gyro_bias == cal.gyro_bias
         assert cal2.accel_offset == cal.accel_offset
+        assert cal2.magnetometer_bias == cal.magnetometer_bias
 
 
 class TestLoadSaveCalibration:
@@ -74,21 +94,26 @@ class TestLoadSaveCalibration:
         cal = load_calibration(Path("/nonexistent/path/cal.json"))
         assert cal.gyro_bias == (0.0, 0.0, 0.0)
         assert cal.accel_offset == (0.0, 0.0, 0.0)
+        assert cal.magnetometer_bias == (0.0, 0.0, 0.0)
 
     def test_load_none_returns_default(self) -> None:
         cal = load_calibration(None)
         assert cal.gyro_bias == (0.0, 0.0, 0.0)
+        assert cal.magnetometer_bias == (0.0, 0.0, 0.0)
 
     def test_save_and_load_roundtrip(self) -> None:
         with tempfile.TemporaryDirectory() as d:
             path = Path(d) / "cal.json"
             cal = Calibration(
-                gyro_bias=(0.01, -0.02, 0.01), accel_offset=(0.0, 0.0, 0.0)
+                gyro_bias=(0.01, -0.02, 0.01),
+                accel_offset=(0.0, 0.0, 0.0),
+                magnetometer_bias=(1.0, 2.0, 3.0),
             )
             assert save_calibration(path, cal) is True
             loaded = load_calibration(path)
             assert loaded.gyro_bias == cal.gyro_bias
             assert loaded.accel_offset == cal.accel_offset
+            assert loaded.magnetometer_bias == cal.magnetometer_bias
 
     def test_load_invalid_json_returns_default(self) -> None:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
@@ -97,5 +122,6 @@ class TestLoadSaveCalibration:
         try:
             cal = load_calibration(path)
             assert cal.gyro_bias == (0.0, 0.0, 0.0)
+            assert cal.magnetometer_bias == (0.0, 0.0, 0.0)
         finally:
             path.unlink()

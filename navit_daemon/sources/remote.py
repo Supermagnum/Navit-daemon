@@ -2,10 +2,11 @@
 Remote data source: TCP server accepting JSON from Android/iOS or other clients.
 
 Protocol: one JSON object per line (newline-delimited).
-- IMU: {"accel":[x,y,z],"gyro":[x,y,z]}  (accel m/s^2, gyro deg/s)
+- IMU: {"accel":[x,y,z],"gyro":[x,y,z],"magnetometer":[x,y,z]}
+  (accel m/s^2, gyro deg/s, magnetometer uT; magnetometer optional)
 - GPS: {"lat":float,"lon":float,"alt":float,"speed_ms":float,"track":float,
         "time_iso":str|null}
-- Combined: both keys in one object.
+- Combined: all keys in one object.
 """
 
 import json
@@ -34,6 +35,7 @@ class RemoteSource(IMUSource, GPSSource):
         self._lock = threading.Lock()
         self._last_accel: Optional[Tuple[float, float, float]] = None
         self._last_gyro: Optional[Tuple[float, float, float]] = None
+        self._last_magnetometer: Optional[Tuple[float, float, float]] = None
         self._last_fix: Optional[GpsFix] = None
         self._sock: Optional[socket.socket] = None
         self._thread: Optional[threading.Thread] = None
@@ -123,6 +125,14 @@ class RemoteSource(IMUSource, GPSSource):
                 ):
                     self._last_accel = (float(a[0]), float(a[1]), float(a[2]))
                     self._last_gyro = (float(g[0]), float(g[1]), float(g[2]))
+            if "magnetometer" in data:
+                m = data["magnetometer"]
+                if isinstance(m, (list, tuple)) and len(m) >= 3:
+                    self._last_magnetometer = (
+                        float(m[0]),
+                        float(m[1]),
+                        float(m[2]),
+                    )
             if "lat" in data and "lon" in data:
                 lat = float(data["lat"])
                 lon = float(data["lon"])
@@ -148,7 +158,7 @@ class RemoteSource(IMUSource, GPSSource):
     def read(self) -> IMUSample:
         with self._lock:
             if self._last_accel and self._last_gyro:
-                return (self._last_accel, self._last_gyro)
+                return (self._last_accel, self._last_gyro, self._last_magnetometer)
         return None
 
     def get_fix(self) -> Optional[GpsFix]:

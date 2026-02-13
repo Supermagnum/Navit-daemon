@@ -38,8 +38,12 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener 
     private lateinit var statusText: TextView
     private lateinit var connectButton: Button
 
+    private var accelerometer: Sensor? = null
+    private var gyroscope: Sensor? = null
+    private var magnetometer: Sensor? = null
     private var lastAccel: FloatArray? = null
     private var lastGyro: FloatArray? = null
+    private var lastMagnetometer: FloatArray? = null
     private var lastLocation: Location? = null
 
     companion object {
@@ -62,6 +66,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener 
 
         accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
         gyroscope = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
+        magnetometer = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
 
         connectButton.setOnClickListener {
             if (isConnected) {
@@ -126,6 +131,13 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener 
                     gyroscope,
                     SensorManager.SENSOR_DELAY_FASTEST
                 )
+                if (magnetometer != null) {
+                    sensorManager.registerListener(
+                        this,
+                        magnetometer,
+                        SensorManager.SENSOR_DELAY_FASTEST
+                    )
+                }
 
                 if (ContextCompat.checkSelfPermission(
                         this,
@@ -178,6 +190,9 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener 
                 lastGyro = event.values.clone()
                 sendIMUData()
             }
+            Sensor.TYPE_MAGNETIC_FIELD -> {
+                lastMagnetometer = event.values.clone()
+            }
         }
     }
 
@@ -204,7 +219,16 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener 
                 Math.toDegrees(lastGyro!![2].toDouble()).toFloat()
             )
 
-            val json = """{"accel":[${accelMps2[0]},${accelMps2[1]},${accelMps2[2]}],"gyro":[${gyroDegPerS[0]},${gyroDegPerS[1]},${gyroDegPerS[2]}]}"""
+            val json = if (lastMagnetometer != null) {
+                val magUt = floatArrayOf(
+                    lastMagnetometer!![0],
+                    lastMagnetometer!![1],
+                    lastMagnetometer!![2]
+                )
+                """{"accel":[${accelMps2[0]},${accelMps2[1]},${accelMps2[2]}],"gyro":[${gyroDegPerS[0]},${gyroDegPerS[1]},${gyroDegPerS[2]}],"magnetometer":[${magUt[0]},${magUt[1]},${magUt[2]}]}"""
+            } else {
+                """{"accel":[${accelMps2[0]},${accelMps2[1]},${accelMps2[2]}],"gyro":[${gyroDegPerS[0]},${gyroDegPerS[1]},${gyroDegPerS[2]}]}"""
+            }
             writer!!.write(json)
             writer!!.newLine()
             writer!!.flush()

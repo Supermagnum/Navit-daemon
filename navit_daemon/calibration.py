@@ -1,9 +1,10 @@
 """
-IMU calibration state: gyro bias and accel offset.
+IMU calibration state: gyro bias, accel offset, and magnetometer bias.
 
 Applied as: calibrated_gyro = raw_gyro - gyro_bias,
-            calibrated_accel = raw_accel - accel_offset.
-Units: gyro_bias deg/s, accel_offset m/s^2.
+            calibrated_accel = raw_accel - accel_offset,
+            calibrated_magnetometer = raw_magnetometer - magnetometer_bias.
+Units: gyro_bias deg/s, accel_offset m/s^2, magnetometer_bias microtesla (uT).
 """
 
 import json
@@ -28,20 +29,26 @@ def _to_triple(
 
 class Calibration:
     """
-    Mutable calibration: gyro bias and accel offset.
+    Mutable calibration: gyro bias, accel offset, and magnetometer bias.
 
     Bias/offset are subtracted from raw readings before fusion.
     """
 
-    __slots__ = ("gyro_bias", "accel_offset")
+    __slots__ = ("gyro_bias", "accel_offset", "magnetometer_bias")
 
     def __init__(
         self,
         gyro_bias: Optional[Tuple[float, float, float]] = None,
         accel_offset: Optional[Tuple[float, float, float]] = None,
+        magnetometer_bias: Optional[Tuple[float, float, float]] = None,
     ) -> None:
         self.gyro_bias: Tuple[float, float, float] = gyro_bias or (0.0, 0.0, 0.0)
         self.accel_offset: Tuple[float, float, float] = accel_offset or (0.0, 0.0, 0.0)
+        self.magnetometer_bias: Tuple[float, float, float] = magnetometer_bias or (
+            0.0,
+            0.0,
+            0.0,
+        )
 
     def apply_gyro(
         self, gyro: Tuple[float, float, float]
@@ -63,11 +70,22 @@ class Calibration:
             accel[2] - self.accel_offset[2],
         )
 
+    def apply_magnetometer(
+        self, magnetometer: Tuple[float, float, float]
+    ) -> Tuple[float, float, float]:
+        """Return magnetometer minus bias (microtesla, uT)."""
+        return (
+            magnetometer[0] - self.magnetometer_bias[0],
+            magnetometer[1] - self.magnetometer_bias[1],
+            magnetometer[2] - self.magnetometer_bias[2],
+        )
+
     def to_dict(self) -> dict:
         """Serialise to a JSON-suitable dict."""
         return {
             "gyro_bias": list(self.gyro_bias),
             "accel_offset": list(self.accel_offset),
+            "magnetometer_bias": list(self.magnetometer_bias),
         }
 
     @classmethod
@@ -78,6 +96,9 @@ class Calibration:
         return cls(
             gyro_bias=_to_triple(data.get("gyro_bias"), (0.0, 0.0, 0.0)),
             accel_offset=_to_triple(data.get("accel_offset"), (0.0, 0.0, 0.0)),
+            magnetometer_bias=_to_triple(
+                data.get("magnetometer_bias"), (0.0, 0.0, 0.0)
+            ),
         )
 
 

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "navit-daemon"
 version = "0.1.0"
-description = "Daemon that fuses GPS (gpsd) and IMU (Linux IIO) for Navit with AHRS heading."
+description = "Daemon that integrates accelerometer, gyroscope, magnetometer, and GPS data into unified NMEA output with AHRS-derived heading for navigation applications."
 readme = "README.md"
 requires-python = ">=3.8"
 license = { text = "GPL-2.0-or-later" }
