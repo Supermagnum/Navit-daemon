@@ -8,3 +8,20 @@ __pycache__/
 
 # Local calibration (optional)
 cal.json
+
+# Android build artifacts
+android/.gradle/
+android/app/build/
+android/build/
+android/local.properties
+android/.idea/
+*.iml
+
+# iOS build artifacts
+ios/build/
+ios/DerivedData/
+ios/*.xcworkspace/xcuserdata/
+ios/*.xcodeproj/xcuserdata/
+ios/*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcuserstate
+*.xcuserdatad

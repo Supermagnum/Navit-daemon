@@ -129,6 +129,8 @@ echo '{"calibrate_gyro": {"seconds": 5}}' | nc -q 1 127.0.0.1 2950
 
 For in-app fusion on Android or iOS without the daemon, use the platform APIs (SensorManager rotation vector, Core Motion device motion) inside Navit’s platform-specific vehicle code using the APIs described in the Comparison table above.
 
+**Build instructions:** See [BUILD.md](BUILD.md) for platform-specific build and packaging instructions for Linux, Android, and iOS.
+
 ### How the Navit codebase can benefit from these sensors
 
 The following is based on the Navit codebase at `../navit` (or the navit repo). Navit consumes position and direction via the vehicle plugin interface. Key attributes are `position_direction` (heading in degrees), `position_speed`, `position_coord_geo`, and optionally `position_magnetic_direction`. Providing better or continuous direction from magnetometer/gyro/accelerometer fusion improves several areas:
