@@ -14,6 +14,68 @@ The daemon uses AHRS (Attitude and Heading Reference System) fusion to compute o
 
 **Test results:** See [TEST_RESULTS.md](TEST_RESULTS.md) for comprehensive test coverage details (172 passed, 17 skipped).
 
+## Install
+
+### Requirements
+
+- Python 3.8 or higher
+- pip
+- For Linux with local IMU: Linux kernel with IIO subsystem and (optionally) gpsd for GPS
+
+### Install from source
+
+```bash
+# Clone the repository
+git clone https://github.com/Supermagnum/Navit-daemon.git
+cd Navit-daemon
+
+# Create and activate a virtual environment (recommended)
+python3 -m venv .venv
+source .venv/bin/activate   # Linux/macOS
+# .venv\Scripts\activate    # Windows
+
+# Install the package and its dependencies
+pip install .
+
+# Verify installation
+navit-daemon --help
+```
+
+### Install in development mode (with dev tools)
+
+```bash
+pip install -e ".[dev]"
+```
+
+This installs the package in editable mode and adds dev dependencies (flake8, black, mypy, pytest). Run tests with:
+
+```bash
+pytest tests -v --tb=short
+```
+
+### Install from a built wheel
+
+```bash
+# Build wheel (from project root)
+pip install build
+python -m build
+
+# Install the wheel
+pip install dist/navit_daemon-*.whl
+```
+
+### Optional: system-wide install
+
+```bash
+sudo pip install .
+# or
+pip install --user .
+```
+
+The `navit-daemon` command will be available on your PATH.
+
+**Build and packaging:** For full build instructions (Linux, Android client, iOS client), creating distribution packages, and systemd service setup, see [BUILD.md](BUILD.md).
+
 ## Sensor APIs by platform (compass, gyro, accelerometer)
 
 How Android, iPhone, and the Toughpad FZ-G1 expose and use the digital compass (magnetometer), gyroscope, and accelerometer.
