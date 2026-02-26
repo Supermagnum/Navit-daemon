@@ -14,7 +14,7 @@ pip install -e ".[fuzz]"
 pip install -e ".[dev,fuzz]"
 ```
 
-Atheris requires a Python build with libFuzzer support (e.g. built with `-fsanitize=fuzzer`). On many systems the standard CPython does not include this; use a [sanitizer-enabled Python build](https://github.com/google/atheris#installation) or the prebuilt Atheris wheels. You can still run the harnesses as scripts without libFuzzer; they will execute the seed corpus once.
+Atheris ships with a built-in libFuzzer in its [prebuilt wheels](https://pypi.org/project/atheris/); `pip install atheris` is enough for coverage-guided fuzzing of Python code. A custom Python or Clang build is only needed if you fuzz native C/C++ extensions with sanitizers (see [Atheris installation](https://github.com/google/atheris#installation)).
 
 ## Harnesses
 
@@ -96,4 +96,4 @@ The remote_parse fuzzer often reaches **cov 47** and then stops finding new edge
 
 ## CI
 
-To run a short fuzz run in CI (e.g. 30–60 seconds per harness) without requiring a sanitizer build, run the harness with the corpus directory; without libFuzzer, Atheris may run the seeds once and exit. For full fuzzing, use a sanitizer-enabled Python and run longer.
+To run a short fuzz run in CI (e.g. 30–60 seconds per harness), run the harness with the corpus directory. For long runs, use `-max_total_time=N`; the prebuilt Atheris wheels provide full coverage-guided fuzzing.

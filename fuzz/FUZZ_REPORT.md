@@ -59,6 +59,6 @@ Crash artifacts (e.g. `crash-*` in the project root) produced during fuzzing wer
 
 ## Recommendations
 
-- **CI:** Run each harness for a short time (e.g. 30–60 seconds) with the seed corpus to catch regressions. Full coverage-guided fuzzing requires a libFuzzer-capable Python build.
+- **CI:** Run each harness for a short time (e.g. 30–60 seconds) with the seed corpus to catch regressions. Full coverage-guided fuzzing works with the standard Atheris wheels (`pip install atheris`); a custom Python build is only needed when fuzzing native C/C++ extensions.
 - **Corpus:** Keep seed corpora in `fuzz/corpus/<harness>/` with valid and edge-case inputs. Do not commit large generated corpora or crash artifacts.
 - **New code:** When adding parsers or API handlers that accept JSON or untrusted input, extend the relevant harness or add a new one and run fuzzing before and after changes.
