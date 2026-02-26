@@ -113,6 +113,8 @@ class RemoteSource(IMUSource, GPSSource):
             data = json.loads(line)
         except json.JSONDecodeError:
             return
+        if not isinstance(data, dict):
+            return
         with self._lock:
             if "accel" in data and "gyro" in data:
                 a = data["accel"]
@@ -123,37 +125,47 @@ class RemoteSource(IMUSource, GPSSource):
                     and isinstance(g, (list, tuple))
                     and len(g) >= 3
                 ):
-                    self._last_accel = (float(a[0]), float(a[1]), float(a[2]))
-                    self._last_gyro = (float(g[0]), float(g[1]), float(g[2]))
+                    try:
+                        self._last_accel = (float(a[0]), float(a[1]), float(a[2]))
+                        self._last_gyro = (float(g[0]), float(g[1]), float(g[2]))
+                    except (TypeError, ValueError):
+                        pass
             if "magnetometer" in data:
                 m = data["magnetometer"]
                 if isinstance(m, (list, tuple)) and len(m) >= 3:
-                    self._last_magnetometer = (
-                        float(m[0]),
-                        float(m[1]),
-                        float(m[2]),
-                    )
+                    try:
+                        self._last_magnetometer = (
+                            float(m[0]),
+                            float(m[1]),
+                            float(m[2]),
+                        )
+                    except (TypeError, ValueError):
+                        pass
             if "lat" in data and "lon" in data:
-                lat = float(data["lat"])
-                lon = float(data["lon"])
-                alt = float(data.get("alt", 0))
-                speed_ms = float(data.get("speed_ms", 0))
-                track = float(data.get("track", 0))
-                time_iso = data.get("time_iso")
-                if isinstance(time_iso, str):
+                try:
+                    lat = float(data["lat"])
+                    lon = float(data["lon"])
+                    alt = float(data.get("alt", 0))
+                    speed_ms = float(data.get("speed_ms", 0))
+                    track = float(data.get("track", 0))
+                except (TypeError, ValueError):
                     pass
                 else:
-                    time_iso = None
-                self._last_fix = GpsFix(
-                    lat=lat,
-                    lon=lon,
-                    alt=alt,
-                    speed_ms=speed_ms,
-                    track=track,
-                    valid=True,
-                    mode=2,
-                    time_iso=time_iso,
-                )
+                    time_iso = data.get("time_iso")
+                    if isinstance(time_iso, str):
+                        pass
+                    else:
+                        time_iso = None
+                    self._last_fix = GpsFix(
+                        lat=lat,
+                        lon=lon,
+                        alt=alt,
+                        speed_ms=speed_ms,
+                        track=track,
+                        valid=True,
+                        mode=2,
+                        time_iso=time_iso,
+                    )
 
     def read(self) -> IMUSample:
         with self._lock:

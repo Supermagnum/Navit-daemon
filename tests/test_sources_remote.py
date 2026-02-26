@@ -131,12 +131,16 @@ class TestRemoteSourceParseLineInvalid:
         source._parse_line('{"magnetometer":[10,20,30]}')
         assert source.read() is None
 
-    def test_magnetometer_invalid_numeric_raises_value_error(self) -> None:
+    def test_magnetometer_invalid_numeric_ignored(self) -> None:
+        """Invalid magnetometer values are ignored; no crash."""
         source = RemoteSource(host="127.0.0.1", port=0)
-        with pytest.raises(ValueError):
-            source._parse_line(
-                '{"accel":[0,0,9.81],"gyro":[0,0,0],"magnetometer":["not a number",20,30]}'
-            )
+        source._parse_line(
+            '{"accel":[0,0,9.81],"gyro":[0,0,0],"magnetometer":["not a number",20,30]}'
+        )
+        sample = source.read()
+        assert sample is not None
+        accel, gyro, magnetometer = sample
+        assert magnetometer is None
 
 
 class TestRemoteSourceParseLineEdgeCases:

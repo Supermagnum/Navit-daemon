@@ -25,3 +25,10 @@ ios/*.xcodeproj/xcuserdata/
 ios/*.xcodeproj/project.xcworkspace/xcuserdata/
 *.xcuserstate
 *.xcuserdatad
+
+# Fuzzer artifacts (libFuzzer / Atheris)
+fuzz/crashes/
+fuzz/timeouts/
+fuzz/leaks/
+fuzz/corpus_artifacts/
+fuzz/logs/

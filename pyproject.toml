@@ -17,6 +17,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["flake8", "black", "mypy", "pytest"]
+fuzz = ["atheris>=2.0.0"]
 
 [project.scripts]
 navit-daemon = "navit_daemon.main:main"

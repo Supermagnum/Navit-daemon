@@ -76,6 +76,8 @@ The `navit-daemon` command will be available on your PATH.
 
 **Build and packaging:** For full build instructions (Linux, Android client, iOS client), creating distribution packages, and systemd service setup, see [BUILD.md](BUILD.md).
 
+**Fuzzing:** LibFuzzer-style fuzzing harnesses and seed corpora are in `fuzz/`. See [fuzz/FUZZ.md](fuzz/FUZZ.md) for install (pip install -e ".[fuzz]"), running harnesses, and corpus layout. Fuzz run results, coverage plateaus, and crashes found and fixed are in [fuzz/FUZZ_REPORT.md](fuzz/FUZZ_REPORT.md).
+
 ## Sensor APIs by platform (compass, gyro, accelerometer)
 
 How Android, iPhone, and the Toughpad FZ-G1 expose and use the digital compass (magnetometer), gyroscope, and accelerometer.

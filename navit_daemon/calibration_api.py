@@ -135,26 +135,35 @@ def _handle_request(  # noqa: C901
         if gyro_bias is not None:
             if not isinstance(gyro_bias, (list, tuple)) or len(gyro_bias) < 3:
                 return {"error": "gyro_bias must be [x,y,z]"}
-            gyro_bias = (float(gyro_bias[0]), float(gyro_bias[1]), float(gyro_bias[2]))
+            try:
+                gyro_bias = (float(gyro_bias[0]), float(gyro_bias[1]), float(gyro_bias[2]))
+            except (TypeError, ValueError):
+                return {"error": "gyro_bias must be [x,y,z]"}
         if accel_offset is not None:
             if not isinstance(accel_offset, (list, tuple)) or len(accel_offset) < 3:
                 return {"error": "accel_offset must be [x,y,z]"}
-            accel_offset = (
-                float(accel_offset[0]),
-                float(accel_offset[1]),
-                float(accel_offset[2]),
-            )
+            try:
+                accel_offset = (
+                    float(accel_offset[0]),
+                    float(accel_offset[1]),
+                    float(accel_offset[2]),
+                )
+            except (TypeError, ValueError):
+                return {"error": "accel_offset must be [x,y,z]"}
         if magnetometer_bias is not None:
             if (
                 not isinstance(magnetometer_bias, (list, tuple))
                 or len(magnetometer_bias) < 3
             ):
                 return {"error": "magnetometer_bias must be [x,y,z]"}
-            magnetometer_bias = (
-                float(magnetometer_bias[0]),
-                float(magnetometer_bias[1]),
-                float(magnetometer_bias[2]),
-            )
+            try:
+                magnetometer_bias = (
+                    float(magnetometer_bias[0]),
+                    float(magnetometer_bias[1]),
+                    float(magnetometer_bias[2]),
+                )
+            except (TypeError, ValueError):
+                return {"error": "magnetometer_bias must be [x,y,z]"}
         manager.set_calibration(
             gyro_bias=gyro_bias,
             accel_offset=accel_offset,
